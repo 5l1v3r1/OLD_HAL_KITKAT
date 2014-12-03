@@ -1,0 +1,5 @@
+mkdir ~/AOSP_KITKAT
+cd ~/AOSP_KITKAT
+repo init -u https://android.googlesource.com/platform/manifest -b ics-plus-aosp  
+
+repo sync -f

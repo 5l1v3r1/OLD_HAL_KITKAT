@@ -1,0 +1,9 @@
+cd ~/AOSP_KITKAT
+
+. build/envsetup.sh
+
+lunch
+
+make -j5
+
+
