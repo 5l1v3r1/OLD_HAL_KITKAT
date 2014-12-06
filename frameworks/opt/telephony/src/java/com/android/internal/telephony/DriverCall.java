@@ -15,16 +15,16 @@
  */
 
 package com.android.internal.telephony;
-
-import android.telephony.Rlog;
+//import com.android.internal.telephony.*;
+import android.util.Log;
 import java.lang.Comparable;
 import android.telephony.PhoneNumberUtils;
 
 /**
  * {@hide}
  */
-public class DriverCall implements Comparable<DriverCall> {
-    static final String LOG_TAG = "DriverCall";
+public class DriverCall implements Comparable {
+    static final String LOG_TAG = "RILB";
 
     public enum State {
         ACTIVE,
@@ -90,7 +90,7 @@ public class DriverCall implements Comparable<DriverCall> {
 
             }
         } catch (ATParseEx ex) {
-            Rlog.e(LOG_TAG,"Invalid CLCC line: '" + line + "'");
+            Log.e(LOG_TAG,"Invalid CLCC line: '" + line + "'");
             return null;
         }
 
@@ -101,7 +101,6 @@ public class DriverCall implements Comparable<DriverCall> {
     DriverCall() {
     }
 
-    @Override
     public String
     toString() {
         return "id=" + index + ","
@@ -146,9 +145,11 @@ public class DriverCall implements Comparable<DriverCall> {
     //***** Comparable Implementation
 
     /** For sorting by index */
-    @Override
     public int
-    compareTo(DriverCall dc) {
+    compareTo (Object o) {
+        DriverCall dc;
+
+        dc = (DriverCall)o;
 
         if (index < dc.index) {
             return -1;

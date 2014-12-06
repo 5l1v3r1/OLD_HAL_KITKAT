@@ -45,8 +45,6 @@ public class ResultException extends CatException {
                 throw new AssertionError(
                         "For result code, " + result +
                         ", additional information must be given!");
-            default:
-                break;
         }
 
         mResult = result;

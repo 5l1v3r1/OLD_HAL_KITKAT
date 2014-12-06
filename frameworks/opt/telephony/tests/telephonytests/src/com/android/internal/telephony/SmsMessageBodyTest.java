@@ -18,11 +18,11 @@ package com.android.internal.telephony;
 
 import android.telephony.SmsMessage;
 import android.telephony.TelephonyManager;
-import android.telephony.Rlog;
 import android.test.AndroidTestCase;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.util.Log;
 
 import com.android.internal.telephony.SmsConstants;
 
@@ -480,9 +480,9 @@ public class SmsMessageBodyTest extends AndroidTestCase {
         }
 
         void printStats() {
-            Rlog.d(TAG, "Unicode selection count: " + mUnicodeCounter);
+            Log.d(TAG, "Unicode selection count: " + mUnicodeCounter);
             for (int i = 0; i < 12; i++) {
-                Rlog.d(TAG, "Language pair index " + i + " count: " + mStatsCounters[i]);
+                Log.d(TAG, "Language pair index " + i + " count: " + mStatsCounters[i]);
             }
         }
     }
@@ -517,7 +517,7 @@ public class SmsMessageBodyTest extends AndroidTestCase {
                 ch.addChar(charClass);
 
 //                if (i % 20 == 0) {
-//                    Rlog.d(TAG, "test string: " + sb);
+//                    Log.d(TAG, "test string: " + sb);
 //                }
 
                 // Test string against all combinations of enabled languages
@@ -537,13 +537,13 @@ public class SmsMessageBodyTest extends AndroidTestCase {
                 // after 10 iterations with a Unicode-only string, skip to next test string
                 // so we can spend more time testing strings that do encode into 7 bits.
                 if (unicodeOnly && ++unicodeOnlyCount == 10) {
-//                    Rlog.d(TAG, "Unicode only: skipping to next test string");
+//                    Log.d(TAG, "Unicode only: skipping to next test string");
                     break;
                 }
             }
         }
         ch.printStats();
-        Rlog.d(TAG, "Completed in " + (System.currentTimeMillis() - startTime) + " ms");
+        Log.d(TAG, "Completed in " + (System.currentTimeMillis() - startTime) + " ms");
         GsmAlphabet.setEnabledLockingShiftTables(origLockingShiftTables);
         GsmAlphabet.setEnabledSingleShiftTables(origSingleShiftTables);
     }

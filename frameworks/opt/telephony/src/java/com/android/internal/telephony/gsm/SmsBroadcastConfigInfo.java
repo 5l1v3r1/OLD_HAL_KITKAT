@@ -35,99 +35,99 @@ package com.android.internal.telephony.gsm;
  *
  */
 public final class SmsBroadcastConfigInfo {
-    private int mFromServiceId;
-    private int mToServiceId;
-    private int mFromCodeScheme;
-    private int mToCodeScheme;
-    private boolean mSelected;
+    private int fromServiceId;
+    private int toServiceId;
+    private int fromCodeScheme;
+    private int toCodeScheme;
+    private boolean selected;
 
     /**
      * Initialize the object from rssi and cid.
      */
     public SmsBroadcastConfigInfo(int fromId, int toId, int fromScheme,
             int toScheme, boolean selected) {
-        mFromServiceId = fromId;
-        mToServiceId = toId;
-        mFromCodeScheme = fromScheme;
-        mToCodeScheme = toScheme;
-        mSelected = selected;
+        fromServiceId = fromId;
+        toServiceId = toId;
+        fromCodeScheme = fromScheme;
+        toCodeScheme = toScheme;
+        this.selected = selected;
     }
 
     /**
      * @param fromServiceId the fromServiceId to set
      */
     public void setFromServiceId(int fromServiceId) {
-        mFromServiceId = fromServiceId;
+        this.fromServiceId = fromServiceId;
     }
 
     /**
      * @return the fromServiceId
      */
     public int getFromServiceId() {
-        return mFromServiceId;
+        return fromServiceId;
     }
 
     /**
      * @param toServiceId the toServiceId to set
      */
     public void setToServiceId(int toServiceId) {
-        mToServiceId = toServiceId;
+        this.toServiceId = toServiceId;
     }
 
     /**
      * @return the toServiceId
      */
     public int getToServiceId() {
-        return mToServiceId;
+        return toServiceId;
     }
 
     /**
      * @param fromCodeScheme the fromCodeScheme to set
      */
     public void setFromCodeScheme(int fromCodeScheme) {
-        mFromCodeScheme = fromCodeScheme;
+        this.fromCodeScheme = fromCodeScheme;
     }
 
     /**
      * @return the fromCodeScheme
      */
     public int getFromCodeScheme() {
-        return mFromCodeScheme;
+        return fromCodeScheme;
     }
 
     /**
      * @param toCodeScheme the toCodeScheme to set
      */
     public void setToCodeScheme(int toCodeScheme) {
-        mToCodeScheme = toCodeScheme;
+        this.toCodeScheme = toCodeScheme;
     }
 
     /**
      * @return the toCodeScheme
      */
     public int getToCodeScheme() {
-        return mToCodeScheme;
+        return toCodeScheme;
     }
 
     /**
      * @param selected the selected to set
      */
     public void setSelected(boolean selected) {
-        mSelected = selected;
+        this.selected = selected;
     }
 
     /**
      * @return the selected
      */
     public boolean isSelected() {
-        return mSelected;
+        return selected;
     }
 
     @Override
     public String toString() {
         return "SmsBroadcastConfigInfo: Id [" +
-                mFromServiceId + ',' + mToServiceId + "] Code [" +
-                mFromCodeScheme + ',' + mToCodeScheme + "] " +
-            (mSelected ? "ENABLED" : "DISABLED");
+                fromServiceId + ',' + toServiceId + "] Code [" +
+                fromCodeScheme + ',' + toCodeScheme + "] " +
+            (selected ? "ENABLED" : "DISABLED");
     }
 }

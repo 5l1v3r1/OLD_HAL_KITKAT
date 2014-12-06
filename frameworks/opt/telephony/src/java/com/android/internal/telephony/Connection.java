@@ -16,7 +16,6 @@
 
 package com.android.internal.telephony;
 
-import android.telephony.Rlog;
 import android.util.Log;
 
 /**
@@ -25,10 +24,10 @@ import android.util.Log;
 public abstract class Connection {
 
     //Caller Name Display
-    protected String mCnapName;
-    protected int mCnapNamePresentation  = PhoneConstants.PRESENTATION_ALLOWED;
+    protected String cnapName;
+    protected int cnapNamePresentation  = PhoneConstants.PRESENTATION_ALLOWED;
 
-    private static String LOG_TAG = "Connection";
+    private static String LOG_TAG = "TelephonyConnection";
 
     public enum DisconnectCause {
         NOT_DISCONNECTED,               /* has not yet disconnected */
@@ -70,7 +69,7 @@ public abstract class Connection {
         ERROR_UNSPECIFIED
     }
 
-    Object mUserData;
+    Object userData;
 
     /* Instance Methods */
 
@@ -88,7 +87,7 @@ public abstract class Connection {
      * @return cnap name or null if unavailable
      */
     public String getCnapName() {
-        return mCnapName;
+        return cnapName;
     }
 
     /**
@@ -105,8 +104,8 @@ public abstract class Connection {
      */
 
     public int getCnapNamePresentation() {
-       return mCnapNamePresentation;
-    }
+       return cnapNamePresentation;
+    };
 
     /**
      * @return Call that owns this Connection, or null if none
@@ -207,7 +206,7 @@ public abstract class Connection {
      * @return the userdata set in setUserData()
      */
     public Object getUserData() {
-        return mUserData;
+        return userData;
     }
 
     /**
@@ -215,7 +214,7 @@ public abstract class Connection {
      * @param userdata user can store an any userdata in the Connection object.
      */
     public void setUserData(Object userdata) {
-        mUserData = userdata;
+        this.userData = userdata;
     }
 
     /**
@@ -247,7 +246,7 @@ public abstract class Connection {
     }
 
     public void clearUserData(){
-        mUserData = null;
+        userData = null;
     }
 
     public abstract PostDialState getPostDialState();
@@ -294,7 +293,7 @@ public abstract class Connection {
     public String toString() {
         StringBuilder str = new StringBuilder(128);
 
-        if (Rlog.isLoggable(LOG_TAG, Log.DEBUG)) {
+        if (Log.isLoggable(LOG_TAG, Log.DEBUG)) {
             str.append("addr: " + getAddress())
                     .append(" pres.: " + getNumberPresentation())
                     .append(" dial: " + getOrigDialString())

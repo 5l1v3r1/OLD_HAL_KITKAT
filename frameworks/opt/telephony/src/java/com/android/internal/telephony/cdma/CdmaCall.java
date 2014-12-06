@@ -16,6 +16,7 @@
 
 package com.android.internal.telephony.cdma;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.android.internal.telephony.Call;
@@ -23,6 +24,7 @@ import com.android.internal.telephony.CallStateException;
 import com.android.internal.telephony.Connection;
 import com.android.internal.telephony.DriverCall;
 import com.android.internal.telephony.Phone;
+import com.android.internal.telephony.Call.State;
 
 /**
  * {@hide}
@@ -30,7 +32,9 @@ import com.android.internal.telephony.Phone;
 public final class CdmaCall extends Call {
     /*************************** Instance Variables **************************/
 
-    /*package*/ CdmaCallTracker mOwner;
+    /*package*/ ArrayList<Connection> connections = new ArrayList<Connection>();
+    /*package*/ State state = State.IDLE;
+    /*package*/ CdmaCallTracker owner;
 
     /***************************** Class Methods *****************************/
 
@@ -51,75 +55,75 @@ public final class CdmaCall extends Call {
     /****************************** Constructors *****************************/
     /*package*/
     CdmaCall (CdmaCallTracker owner) {
-        mOwner = owner;
+        this.owner = owner;
     }
 
     public void dispose() {
     }
 
     /************************** Overridden from Call *************************/
-    @Override
     public List<Connection>
     getConnections() {
         // FIXME should return Collections.unmodifiableList();
-        return mConnections;
+        return connections;
     }
 
-    @Override
+    public State
+    getState() {
+        return state;
+    }
+
     public Phone
     getPhone() {
-        return mOwner.mPhone;
+        return owner.phone;
     }
 
-    @Override
     public boolean isMultiparty() {
-        return mConnections.size() > 1;
+        return connections.size() > 1;
     }
 
     /** Please note: if this is the foreground call and a
      *  background call exists, the background call will be resumed
      *  because an AT+CHLD=1 will be sent
      */
-    @Override
     public void
     hangup() throws CallStateException {
-        mOwner.hangup(this);
+        owner.hangup(this);
     }
 
-    @Override
     public String
     toString() {
-        return mState.toString();
+        return state.toString();
     }
 
     //***** Called from CdmaConnection
 
     /*package*/ void
     attach(Connection conn, DriverCall dc) {
-        mConnections.add(conn);
+        connections.add(conn);
 
-        mState = stateFromDCState (dc.state);
+        state = stateFromDCState (dc.state);
     }
 
     /*package*/ void
     attachFake(Connection conn, State state) {
-        mConnections.add(conn);
+        connections.add(conn);
 
-        mState = state;
+        this.state = state;
     }
 
     /**
      * Called by CdmaConnection when it has disconnected
      */
-    boolean
+    void
     connectionDisconnected(CdmaConnection conn) {
-        if (mState != State.DISCONNECTED) {
+        if (state != State.DISCONNECTED) {
             /* If only disconnected connections remain, we are disconnected*/
 
             boolean hasOnlyDisconnectedConnections = true;
 
-            for (int i = 0, s = mConnections.size()  ; i < s; i ++) {
-                if (mConnections.get(i).getState()
+            for (int i = 0, s = connections.size()  ; i < s; i ++) {
+                if (connections.get(i).getState()
                     != State.DISCONNECTED
                 ) {
                     hasOnlyDisconnectedConnections = false;
@@ -128,21 +132,18 @@ public final class CdmaCall extends Call {
             }
 
             if (hasOnlyDisconnectedConnections) {
-                mState = State.DISCONNECTED;
-                return true;
+                state = State.DISCONNECTED;
             }
         }
-
-        return false;
     }
 
 
     /*package*/ void
     detach(CdmaConnection conn) {
-        mConnections.remove(conn);
+        connections.remove(conn);
 
-        if (mConnections.size() == 0) {
-            mState = State.IDLE;
+        if (connections.size() == 0) {
+            state = State.IDLE;
         }
     }
 
@@ -153,8 +154,8 @@ public final class CdmaCall extends Call {
 
         newState = stateFromDCState(dc.state);
 
-        if (newState != mState) {
-            mState = newState;
+        if (newState != state) {
+            state = newState;
             changed = true;
         }
 
@@ -167,7 +168,7 @@ public final class CdmaCall extends Call {
      */
     /*package*/ boolean
     isFull() {
-        return mConnections.size() == CdmaCallTracker.MAX_CONNECTIONS_PER_CALL;
+        return connections.size() == CdmaCallTracker.MAX_CONNECTIONS_PER_CALL;
     }
 
     //***** Called from CdmaCallTracker
@@ -180,28 +181,28 @@ public final class CdmaCall extends Call {
      */
     void
     onHangupLocal() {
-        for (int i = 0, s = mConnections.size(); i < s; i++) {
-            CdmaConnection cn = (CdmaConnection)mConnections.get(i);
+        for (int i = 0, s = connections.size(); i < s; i++) {
+            CdmaConnection cn = (CdmaConnection)connections.get(i);
 
             cn.onHangupLocal();
         }
-        mState = State.DISCONNECTING;
+        state = State.DISCONNECTING;
     }
 
     /**
      * Called when it's time to clean up disconnected Connection objects
      */
    void clearDisconnected() {
-        for (int i = mConnections.size() - 1 ; i >= 0 ; i--) {
-        CdmaConnection cn = (CdmaConnection)mConnections.get(i);
+        for (int i = connections.size() - 1 ; i >= 0 ; i--) {
+        CdmaConnection cn = (CdmaConnection)connections.get(i);
 
             if (cn.getState() == State.DISCONNECTED) {
-                mConnections.remove(i);
+                connections.remove(i);
             }
         }
 
-        if (mConnections.size() == 0) {
-            mState = State.IDLE;
+        if (connections.size() == 0) {
+            state = State.IDLE;
         }
     }
 }

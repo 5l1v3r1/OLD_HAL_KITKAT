@@ -17,11 +17,9 @@
 package com.android.internal.telephony.cat;
 
 import com.android.internal.telephony.GsmAlphabet;
+import com.android.internal.telephony.IccUtils;
 import com.android.internal.telephony.cat.Duration.TimeUnit;
-import com.android.internal.telephony.uicc.IccUtils;
 
-import android.content.res.Resources;
-import android.content.res.Resources.NotFoundException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +29,7 @@ abstract class ValueParser {
     /**
      * Search for a Command Details object from a list.
      *
-     * @param ctlv List of ComprehensionTlv objects used for search
+     * @param ctlvs List of ComprehensionTlv objects used for search
      * @return An CtlvCommandDetails object found from the objects. If no
      *         Command Details object is found, ResultException is thrown.
      * @throws ResultException
@@ -56,7 +54,7 @@ abstract class ValueParser {
     /**
      * Search for a Device Identities object from a list.
      *
-     * @param ctlv List of ComprehensionTlv objects used for search
+     * @param ctlvs List of ComprehensionTlv objects used for search
      * @return An CtlvDeviceIdentities object found from the objects. If no
      *         Command Details object is found, ResultException is thrown.
      * @throws ResultException
@@ -287,24 +285,10 @@ abstract class ValueParser {
                     throw new ResultException(ResultCode.CMD_DATA_NOT_UNDERSTOOD);
                 }
             } else {
-                CatLog.d("ValueParser", "Alpha Id length=" + length);
-                return null;
+                return CatService.STK_DEFAULT;
             }
         } else {
-            /* Per 3GPP specification 102.223,
-             * if the alpha identifier is not provided by the UICC,
-             * the terminal MAY give information to the user
-             * noAlphaUsrCnf defines if you need to show user confirmation or not
-             */
-            boolean noAlphaUsrCnf = false;
-            Resources resource = Resources.getSystem();
-            try {
-                noAlphaUsrCnf = resource.getBoolean(
-                        com.android.internal.R.bool.config_stkNoAlphaUsrCnf);
-            } catch (NotFoundException e) {
-                noAlphaUsrCnf = false;
-            }
-            return (noAlphaUsrCnf ? null : CatService.STK_DEFAULT);
+            return CatService.STK_DEFAULT;
         }
     }
 

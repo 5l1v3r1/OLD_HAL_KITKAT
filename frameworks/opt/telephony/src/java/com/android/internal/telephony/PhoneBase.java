@@ -16,13 +16,15 @@
 
 package com.android.internal.telephony;
 
+import android.app.ActivityManagerNative;
+import android.app.IActivityManager;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.SharedPreferences;
 import android.net.LinkCapabilities;
 import android.net.LinkProperties;
 import android.net.wifi.WifiManager;
 import android.os.AsyncResult;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -30,29 +32,25 @@ import android.os.RegistrantList;
 import android.os.SystemProperties;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
-import android.telephony.CellIdentityCdma;
 import android.telephony.CellInfo;
-import android.telephony.CellInfoCdma;
-import android.telephony.Rlog;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.text.TextUtils;
+import android.util.Log;
 
 import com.android.internal.R;
-import com.android.internal.telephony.dataconnection.DcTrackerBase;
+import com.android.internal.telephony.IccCardApplicationStatus.AppState;
+import com.android.internal.telephony.IccCardApplicationStatus.AppType;
+import com.android.internal.telephony.gsm.UsimServiceTable;
+import com.android.internal.telephony.ims.IsimRecords;
 import com.android.internal.telephony.test.SimulatedRadioControl;
-import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
-import com.android.internal.telephony.uicc.IccFileHandler;
-import com.android.internal.telephony.uicc.IccRecords;
-import com.android.internal.telephony.uicc.IsimRecords;
-import com.android.internal.telephony.uicc.UiccCardApplication;
 import com.android.internal.telephony.uicc.UiccController;
-import com.android.internal.telephony.uicc.UsimServiceTable;
+import com.android.internal.telephony.gsm.SIMRecords;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 
 
@@ -69,7 +67,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 
 public abstract class PhoneBase extends Handler implements Phone {
-    private static final String LOG_TAG = "PhoneBase";
+    private static final String LOG_TAG = "PHONE";
+    private static final boolean LOCAL_DEBUG = true;
 
     // Key used to read and write the saved network selection numeric value
     public static final String NETWORK_SELECTION_KEY = "network_selection_key";
@@ -115,8 +114,9 @@ public abstract class PhoneBase extends Handler implements Phone {
     protected static final int EVENT_CDMA_SUBSCRIPTION_SOURCE_CHANGED = 27;
     // other
     protected static final int EVENT_SET_NETWORK_AUTOMATIC          = 28;
-    protected static final int EVENT_ICC_RECORD_EVENTS              = 29;
-    protected static final int EVENT_ICC_CHANGED                    = 30;
+    protected static final int EVENT_NEW_ICC_SMS                    = 29;
+    protected static final int EVENT_ICC_RECORD_EVENTS              = 30;
+    protected static final int EVENT_ICC_CHANGED                    = 31;
 
     // Key used to read/write current CLIR setting
     public static final String CLIR_KEY = "clir_key";
@@ -125,9 +125,9 @@ public abstract class PhoneBase extends Handler implements Phone {
     public static final String DNS_SERVER_CHECK_DISABLED_KEY = "dns_server_check_disabled_key";
 
     /* Instance Variables */
-    public CommandsInterface mCi;
+    public CommandsInterface mCM;
     boolean mDnsCheckDisabled;
-    public DcTrackerBase mDcTracker;
+    public DataConnectionTracker mDataConnectionTracker;
     boolean mDoesRilSendMultipleCallRing;
     int mCallRingContinueToken;
     int mCallRingDelay;
@@ -139,43 +139,13 @@ public abstract class PhoneBase extends Handler implements Phone {
     public SmsUsageMonitor mSmsUsageMonitor;
     protected AtomicReference<UiccCardApplication> mUiccApplication =
             new AtomicReference<UiccCardApplication>();
-
-    private TelephonyTester mTelephonyTester;
-    private final String mName;
-    private final String mActionDetached;
-    private final String mActionAttached;
-
-    @Override
-    public String getPhoneName() {
-        return mName;
-    }
-
-    /**
-     * Return the ActionDetached string. When this action is received by components
-     * they are to simulate detaching from the network.
-     *
-     * @return com.android.internal.telephony.{mName}.action_detached
-     *          {mName} is GSM, CDMA ...
-     */
-    public String getActionDetached() {
-        return mActionDetached;
-    }
-
-    /**
-     * Return the ActionAttached string. When this action is received by components
-     * they are to simulate attaching to the network.
-     *
-     * @return com.android.internal.telephony.{mName}.action_detached
-     *          {mName} is GSM, CDMA ...
-     */
-    public String getActionAttached() {
-        return mActionAttached;
-    }
+    public SMSDispatcher mSMS;
 
     /**
      * Set a system property, unless we're in unit test mode
      */
-    public void setSystemProperty(String property, String value) {
+    public void
+    setSystemProperty(String property, String value) {
         if(getUnitTestMode()) {
             return;
         }
@@ -233,8 +203,8 @@ public abstract class PhoneBase extends Handler implements Phone {
      * unless unit testing.
      * @param ci the CommandsInterface
      */
-    protected PhoneBase(String name, PhoneNotifier notifier, Context context, CommandsInterface ci) {
-        this(name, notifier, context, ci, false);
+    protected PhoneBase(PhoneNotifier notifier, Context context, CommandsInterface ci) {
+        this(notifier, context, ci, false);
     }
 
     /**
@@ -247,19 +217,12 @@ public abstract class PhoneBase extends Handler implements Phone {
      * @param unitTestMode when true, prevents notifications
      * of state change events
      */
-    protected PhoneBase(String name, PhoneNotifier notifier, Context context, CommandsInterface ci,
+    protected PhoneBase(PhoneNotifier notifier, Context context, CommandsInterface ci,
             boolean unitTestMode) {
-        mName = name;
-        mNotifier = notifier;
-        mContext = context;
+        this.mNotifier = notifier;
+        this.mContext = context;
         mLooper = Looper.myLooper();
-        mCi = ci;
-        mActionDetached = this.getClass().getPackage().getName() + ".action_detached";
-        mActionAttached = this.getClass().getPackage().getName() + ".action_attached";
-
-        if (Build.IS_DEBUGGABLE) {
-            mTelephonyTester = new TelephonyTester(this);
-        }
+        mCM = ci;
 
         setPropertiesByCarrier();
 
@@ -267,7 +230,7 @@ public abstract class PhoneBase extends Handler implements Phone {
 
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
         mDnsCheckDisabled = sp.getBoolean(DNS_SERVER_CHECK_DISABLED_KEY, false);
-        mCi.setOnCallRing(this, EVENT_CALL_RING, null);
+        mCM.setOnCallRing(this, EVENT_CALL_RING, null);
 
         /* "Voice capable" means that this device supports circuit-switched
         * (i.e. voice) phone calls over the telephony network, and is allowed
@@ -290,11 +253,11 @@ public abstract class PhoneBase extends Handler implements Phone {
          */
         mDoesRilSendMultipleCallRing = SystemProperties.getBoolean(
                 TelephonyProperties.PROPERTY_RIL_SENDS_MULTIPLE_CALL_RING, true);
-        Rlog.d(LOG_TAG, "mDoesRilSendMultipleCallRing=" + mDoesRilSendMultipleCallRing);
+        Log.d(LOG_TAG, "mDoesRilSendMultipleCallRing=" + mDoesRilSendMultipleCallRing);
 
         mCallRingDelay = SystemProperties.getInt(
                 TelephonyProperties.PROPERTY_CALL_RING_DELAY, 3000);
-        Rlog.d(LOG_TAG, "mCallRingDelay=" + mCallRingDelay);
+        Log.d(LOG_TAG, "mCallRingDelay=" + mCallRingDelay);
 
         // Initialize device storage and outgoing SMS usage monitors for SMSDispatchers.
         mSmsStorageMonitor = new SmsStorageMonitor(this);
@@ -303,31 +266,26 @@ public abstract class PhoneBase extends Handler implements Phone {
         mUiccController.registerForIccChanged(this, EVENT_ICC_CHANGED, null);
     }
 
-    @Override
     public void dispose() {
         synchronized(PhoneProxy.lockForRadioTechnologyChange) {
-            mCi.unSetOnCallRing(this);
+            mCM.unSetOnCallRing(this);
             // Must cleanup all connectionS and needs to use sendMessage!
-            mDcTracker.cleanUpAllConnections(null);
+            mDataConnectionTracker.cleanUpAllConnections(null);
             mIsTheCurrentActivePhone = false;
             // Dispose the SMS usage and storage monitors
             mSmsStorageMonitor.dispose();
             mSmsUsageMonitor.dispose();
             mUiccController.unregisterForIccChanged(this);
-
-            if (mTelephonyTester != null) {
-                mTelephonyTester.dispose();
-            }
         }
     }
 
-    @Override
     public void removeReferences() {
         mSmsStorageMonitor = null;
         mSmsUsageMonitor = null;
+        mSMS = null;
         mIccRecords.set(null);
         mUiccApplication.set(null);
-        mDcTracker = null;
+        mDataConnectionTracker = null;
         mUiccController = null;
     }
 
@@ -342,14 +300,9 @@ public abstract class PhoneBase extends Handler implements Phone {
     public void handleMessage(Message msg) {
         AsyncResult ar;
 
-        if (!mIsTheCurrentActivePhone) {
-            Rlog.e(LOG_TAG, "Received message " + msg +
-                    "[" + msg.what + "] while being destroyed. Ignoring.");
-            return;
-        }
         switch(msg.what) {
             case EVENT_CALL_RING:
-                Rlog.d(LOG_TAG, "Event EVENT_CALL_RING Received state=" + getState());
+                Log.d(LOG_TAG, "Event EVENT_CALL_RING Received state=" + getState());
                 ar = (AsyncResult)msg.obj;
                 if (ar.exception == null) {
                     PhoneConstants.State state = getState();
@@ -365,7 +318,7 @@ public abstract class PhoneBase extends Handler implements Phone {
                 break;
 
             case EVENT_CALL_RING_CONTINUE:
-                Rlog.d(LOG_TAG, "Event EVENT_CALL_RING_CONTINUE Received stat=" + getState());
+                Log.d(LOG_TAG, "Event EVENT_CALL_RING_CONTINUE Received stat=" + getState());
                 if (getState() == PhoneConstants.State.RINGING) {
                     sendIncomingCallRingNotification(msg.arg1);
                 }
@@ -381,7 +334,6 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public Context getContext() {
         return mContext;
     }
@@ -394,7 +346,6 @@ public abstract class PhoneBase extends Handler implements Phone {
      * Useful for lab testing environment.
      * @param b true disables the check, false enables.
      */
-    @Override
     public void disableDnsCheck(boolean b) {
         mDnsCheckDisabled = b;
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
@@ -406,13 +357,11 @@ public abstract class PhoneBase extends Handler implements Phone {
     /**
      * Returns true if the DNS check is currently disabled.
      */
-    @Override
     public boolean isDnsCheckDisabled() {
         return mDnsCheckDisabled;
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForPreciseCallStateChanged(Handler h, int what, Object obj) {
         checkCorrectThread(h);
 
@@ -420,7 +369,6 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForPreciseCallStateChanged(Handler h) {
         mPreciseCallStateRegistrants.remove(h);
     }
@@ -435,7 +383,6 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForUnknownConnection(Handler h, int what, Object obj) {
         checkCorrectThread(h);
 
@@ -443,13 +390,11 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForUnknownConnection(Handler h) {
         mUnknownConnectionRegistrants.remove(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForNewRingingConnection(
             Handler h, int what, Object obj) {
         checkCorrectThread(h);
@@ -458,37 +403,31 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForNewRingingConnection(Handler h) {
         mNewRingingConnectionRegistrants.remove(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForInCallVoicePrivacyOn(Handler h, int what, Object obj){
-        mCi.registerForInCallVoicePrivacyOn(h,what,obj);
+        mCM.registerForInCallVoicePrivacyOn(h,what,obj);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForInCallVoicePrivacyOn(Handler h){
-        mCi.unregisterForInCallVoicePrivacyOn(h);
+        mCM.unregisterForInCallVoicePrivacyOn(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForInCallVoicePrivacyOff(Handler h, int what, Object obj){
-        mCi.registerForInCallVoicePrivacyOff(h,what,obj);
+        mCM.registerForInCallVoicePrivacyOff(h,what,obj);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForInCallVoicePrivacyOff(Handler h){
-        mCi.unregisterForInCallVoicePrivacyOff(h);
+        mCM.unregisterForInCallVoicePrivacyOff(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForIncomingRing(
             Handler h, int what, Object obj) {
         checkCorrectThread(h);
@@ -497,13 +436,11 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForIncomingRing(Handler h) {
         mIncomingRingRegistrants.remove(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForDisconnect(Handler h, int what, Object obj) {
         checkCorrectThread(h);
 
@@ -511,13 +448,11 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForDisconnect(Handler h) {
         mDisconnectRegistrants.remove(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForSuppServiceFailed(Handler h, int what, Object obj) {
         checkCorrectThread(h);
 
@@ -525,13 +460,11 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForSuppServiceFailed(Handler h) {
         mSuppServiceFailedRegistrants.remove(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForMmiInitiate(Handler h, int what, Object obj) {
         checkCorrectThread(h);
 
@@ -539,13 +472,11 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForMmiInitiate(Handler h) {
         mMmiRegistrants.remove(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForMmiComplete(Handler h, int what, Object obj) {
         checkCorrectThread(h);
 
@@ -553,7 +484,6 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForMmiComplete(Handler h) {
         checkCorrectThread(h);
 
@@ -580,20 +510,18 @@ public abstract class PhoneBase extends Handler implements Phone {
 
         // set to auto if the id is empty, otherwise select the network.
         if (TextUtils.isEmpty(networkSelection)) {
-            mCi.setNetworkSelectionModeAutomatic(response);
+            mCM.setNetworkSelectionModeAutomatic(response);
         } else {
-            mCi.setNetworkSelectionModeManual(networkSelection, response);
+            mCM.setNetworkSelectionModeManual(networkSelection, response);
         }
     }
 
     // Inherited documentation suffices.
-    @Override
     public void setUnitTestMode(boolean f) {
         mUnitTestMode = f;
     }
 
     // Inherited documentation suffices.
-    @Override
     public boolean getUnitTestMode() {
         return mUnitTestMode;
     }
@@ -610,7 +538,6 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForServiceStateChanged(
             Handler h, int what, Object obj) {
         checkCorrectThread(h);
@@ -619,36 +546,30 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForServiceStateChanged(Handler h) {
         mServiceStateRegistrants.remove(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForRingbackTone(Handler h, int what, Object obj) {
-        mCi.registerForRingbackTone(h,what,obj);
+        mCM.registerForRingbackTone(h,what,obj);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForRingbackTone(Handler h) {
-        mCi.unregisterForRingbackTone(h);
+        mCM.unregisterForRingbackTone(h);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void registerForResendIncallMute(Handler h, int what, Object obj) {
-        mCi.registerForResendIncallMute(h,what,obj);
+        mCM.registerForResendIncallMute(h,what,obj);
     }
 
     // Inherited documentation suffices.
-    @Override
     public void unregisterForResendIncallMute(Handler h) {
-        mCi.unregisterForResendIncallMute(h);
+        mCM.unregisterForResendIncallMute(h);
     }
 
-    @Override
     public void setEchoSuppressionEnabled(boolean enabled) {
         // no need for regular phone
     }
@@ -665,7 +586,6 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     // Inherited documentation suffices.
-    @Override
     public SimulatedRadioControl getSimulatedRadioControl() {
         return mSimulatedRadioControl;
     }
@@ -730,7 +650,6 @@ public abstract class PhoneBase extends Handler implements Phone {
     /**
      * Get state
      */
-    @Override
     public abstract PhoneConstants.State getState();
 
     /**
@@ -747,12 +666,6 @@ public abstract class PhoneBase extends Handler implements Phone {
      */
     public Handler getHandler() {
         return this;
-    }
-
-    @Override
-    public void updatePhoneObject(int voiceRadioTech) {
-        // Only the PhoneProxy can update the phone object.
-        PhoneFactory.getDefaultPhone().updatePhoneObject(voiceRadioTech);
     }
 
     /**
@@ -786,7 +699,7 @@ public abstract class PhoneBase extends Handler implements Phone {
     @Override
     public String getIccSerialNumber() {
         IccRecords r = mIccRecords.get();
-        return (r != null) ? r.getIccId() : null;
+        return (r != null) ? r.iccid : "";
     }
 
     @Override
@@ -800,48 +713,7 @@ public abstract class PhoneBase extends Handler implements Phone {
      */
     @Override
     public List<CellInfo> getAllCellInfo() {
-        List<CellInfo> cellInfoList = getServiceStateTracker().getAllCellInfo();
-        return privatizeCellInfoList(cellInfoList);
-    }
-
-    /**
-     * Clear CDMA base station lat/long values if location setting is disabled.
-     * @param cellInfoList the original cell info list from the RIL
-     * @return the original list with CDMA lat/long cleared if necessary
-     */
-    private List<CellInfo> privatizeCellInfoList(List<CellInfo> cellInfoList) {
-        int mode = Settings.Secure.getInt(getContext().getContentResolver(),
-                Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF);
-        if (mode == Settings.Secure.LOCATION_MODE_OFF) {
-            ArrayList<CellInfo> privateCellInfoList = new ArrayList<CellInfo>(cellInfoList.size());
-            // clear lat/lon values for location privacy
-            for (CellInfo c : cellInfoList) {
-                if (c instanceof CellInfoCdma) {
-                    CellInfoCdma cellInfoCdma = (CellInfoCdma) c;
-                    CellIdentityCdma cellIdentity = cellInfoCdma.getCellIdentity();
-                    CellIdentityCdma maskedCellIdentity = new CellIdentityCdma(
-                            cellIdentity.getNetworkId(),
-                            cellIdentity.getSystemId(),
-                            cellIdentity.getBasestationId(),
-                            Integer.MAX_VALUE, Integer.MAX_VALUE);
-                    CellInfoCdma privateCellInfoCdma = new CellInfoCdma(cellInfoCdma);
-                    privateCellInfoCdma.setCellIdentity(maskedCellIdentity);
-                    privateCellInfoList.add(privateCellInfoCdma);
-                } else {
-                    privateCellInfoList.add(c);
-                }
-            }
-            cellInfoList = privateCellInfoList;
-        }
-        return cellInfoList;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void setCellInfoListRate(int rateInMillis) {
-        mCi.setCellInfoListRate(rateInMillis, null);
+        return getServiceStateTracker().getAllCellInfo();
     }
 
     @Override
@@ -859,9 +731,8 @@ public abstract class PhoneBase extends Handler implements Phone {
     /**
      *  Query the status of the CDMA roaming preference
      */
-    @Override
     public void queryCdmaRoamingPreference(Message response) {
-        mCi.queryCdmaRoamingPreference(response);
+        mCM.queryCdmaRoamingPreference(response);
     }
 
     /**
@@ -880,85 +751,70 @@ public abstract class PhoneBase extends Handler implements Phone {
     /**
      *  Set the status of the CDMA roaming preference
      */
-    @Override
     public void setCdmaRoamingPreference(int cdmaRoamingType, Message response) {
-        mCi.setCdmaRoamingPreference(cdmaRoamingType, response);
+        mCM.setCdmaRoamingPreference(cdmaRoamingType, response);
     }
 
     /**
      *  Set the status of the CDMA subscription mode
      */
-    @Override
     public void setCdmaSubscription(int cdmaSubscriptionType, Message response) {
-        mCi.setCdmaSubscriptionSource(cdmaSubscriptionType, response);
+        mCM.setCdmaSubscriptionSource(cdmaSubscriptionType, response);
     }
 
     /**
      *  Set the preferred Network Type: Global, CDMA only or GSM/UMTS only
      */
-    @Override
     public void setPreferredNetworkType(int networkType, Message response) {
-        mCi.setPreferredNetworkType(networkType, response);
+        mCM.setPreferredNetworkType(networkType, response);
     }
 
-    @Override
     public void getPreferredNetworkType(Message response) {
-        mCi.getPreferredNetworkType(response);
+        mCM.getPreferredNetworkType(response);
     }
 
-    @Override
     public void getSmscAddress(Message result) {
-        mCi.getSmscAddress(result);
+        mCM.getSmscAddress(result);
     }
 
-    @Override
     public void setSmscAddress(String address, Message result) {
-        mCi.setSmscAddress(address, result);
+        mCM.setSmscAddress(address, result);
     }
 
-    @Override
     public void setTTYMode(int ttyMode, Message onComplete) {
-        mCi.setTTYMode(ttyMode, onComplete);
+        mCM.setTTYMode(ttyMode, onComplete);
     }
 
-    @Override
     public void queryTTYMode(Message onComplete) {
-        mCi.queryTTYMode(onComplete);
+        mCM.queryTTYMode(onComplete);
     }
 
-    @Override
     public void enableEnhancedVoicePrivacy(boolean enable, Message onComplete) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("enableEnhancedVoicePrivacy");
     }
 
-    @Override
     public void getEnhancedVoicePrivacy(Message onComplete) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("getEnhancedVoicePrivacy");
     }
 
-    @Override
     public void setBandMode(int bandMode, Message response) {
-        mCi.setBandMode(bandMode, response);
+        mCM.setBandMode(bandMode, response);
     }
 
-    @Override
     public void queryAvailableBandMode(Message response) {
-        mCi.queryAvailableBandMode(response);
+        mCM.queryAvailableBandMode(response);
     }
 
-    @Override
     public void invokeOemRilRequestRaw(byte[] data, Message response) {
-        mCi.invokeOemRilRequestRaw(data, response);
+        mCM.invokeOemRilRequestRaw(data, response);
     }
 
-    @Override
     public void invokeOemRilRequestStrings(String[] strings, Message response) {
-        mCi.invokeOemRilRequestStrings(strings, response);
+        mCM.invokeOemRilRequestStrings(strings, response);
     }
 
-    @Override
     public void notifyDataActivity() {
         mNotifier.notifyDataActivity(this);
     }
@@ -997,7 +853,7 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     public void notifyCellInfo(List<CellInfo> cellInfo) {
-        mNotifier.notifyCellInfo(this, privatizeCellInfoList(cellInfo));
+        mNotifier.notifyCellInfo(this, cellInfo);
     }
 
     /**
@@ -1016,11 +872,11 @@ public abstract class PhoneBase extends Handler implements Phone {
         return false;
     }
 
-    @Override
+    public abstract String getPhoneName();
+
     public abstract int getPhoneType();
 
     /** @hide */
-    @Override
     public int getVoiceMessageCount(){
         return 0;
     }
@@ -1028,7 +884,6 @@ public abstract class PhoneBase extends Handler implements Phone {
     /**
      * Returns the CDMA ERI icon index to display
      */
-    @Override
     public int getCdmaEriIconIndex() {
         logUnexpectedCdmaMethodCall("getCdmaEriIconIndex");
         return -1;
@@ -1039,7 +894,6 @@ public abstract class PhoneBase extends Handler implements Phone {
      * 0 - ON
      * 1 - FLASHING
      */
-    @Override
     public int getCdmaEriIconMode() {
         logUnexpectedCdmaMethodCall("getCdmaEriIconMode");
         return -1;
@@ -1048,64 +902,54 @@ public abstract class PhoneBase extends Handler implements Phone {
     /**
      * Returns the CDMA ERI text,
      */
-    @Override
     public String getCdmaEriText() {
         logUnexpectedCdmaMethodCall("getCdmaEriText");
         return "GSM nw, no ERI";
     }
 
-    @Override
     public String getCdmaMin() {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("getCdmaMin");
         return null;
     }
 
-    @Override
     public boolean isMinInfoReady() {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("isMinInfoReady");
         return false;
     }
 
-    @Override
     public String getCdmaPrlVersion(){
         //  This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("getCdmaPrlVersion");
         return null;
     }
 
-    @Override
     public void sendBurstDtmf(String dtmfString, int on, int off, Message onComplete) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("sendBurstDtmf");
     }
 
-    @Override
     public void exitEmergencyCallbackMode() {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("exitEmergencyCallbackMode");
     }
 
-    @Override
     public void registerForCdmaOtaStatusChange(Handler h, int what, Object obj) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("registerForCdmaOtaStatusChange");
     }
 
-    @Override
     public void unregisterForCdmaOtaStatusChange(Handler h) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("unregisterForCdmaOtaStatusChange");
     }
 
-    @Override
     public void registerForSubscriptionInfoReady(Handler h, int what, Object obj) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("registerForSubscriptionInfoReady");
     }
 
-    @Override
     public void unregisterForSubscriptionInfoReady(Handler h) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("unregisterForSubscriptionInfoReady");
@@ -1115,7 +959,6 @@ public abstract class PhoneBase extends Handler implements Phone {
      * Returns true if OTA Service Provisioning needs to be performed.
      * If not overridden return false.
      */
-    @Override
     public boolean needsOtaServiceProvisioning() {
         return false;
     }
@@ -1124,156 +967,127 @@ public abstract class PhoneBase extends Handler implements Phone {
      * Return true if number is an OTASP number.
      * If not overridden return false.
      */
-    @Override
     public  boolean isOtaSpNumber(String dialStr) {
         return false;
     }
 
-    @Override
     public void registerForCallWaiting(Handler h, int what, Object obj){
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("registerForCallWaiting");
     }
 
-    @Override
     public void unregisterForCallWaiting(Handler h){
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("unregisterForCallWaiting");
     }
 
-    @Override
     public void registerForEcmTimerReset(Handler h, int what, Object obj) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("registerForEcmTimerReset");
     }
 
-    @Override
     public void unregisterForEcmTimerReset(Handler h) {
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
         logUnexpectedCdmaMethodCall("unregisterForEcmTimerReset");
     }
 
-    @Override
     public void registerForSignalInfo(Handler h, int what, Object obj) {
-        mCi.registerForSignalInfo(h, what, obj);
+        mCM.registerForSignalInfo(h, what, obj);
     }
 
-    @Override
     public void unregisterForSignalInfo(Handler h) {
-        mCi.unregisterForSignalInfo(h);
+        mCM.unregisterForSignalInfo(h);
     }
 
-    @Override
     public void registerForDisplayInfo(Handler h, int what, Object obj) {
-        mCi.registerForDisplayInfo(h, what, obj);
+        mCM.registerForDisplayInfo(h, what, obj);
     }
 
-     @Override
-    public void unregisterForDisplayInfo(Handler h) {
-         mCi.unregisterForDisplayInfo(h);
+     public void unregisterForDisplayInfo(Handler h) {
+         mCM.unregisterForDisplayInfo(h);
      }
 
-    @Override
     public void registerForNumberInfo(Handler h, int what, Object obj) {
-        mCi.registerForNumberInfo(h, what, obj);
+        mCM.registerForNumberInfo(h, what, obj);
     }
 
-    @Override
     public void unregisterForNumberInfo(Handler h) {
-        mCi.unregisterForNumberInfo(h);
+        mCM.unregisterForNumberInfo(h);
     }
 
-    @Override
     public void registerForRedirectedNumberInfo(Handler h, int what, Object obj) {
-        mCi.registerForRedirectedNumberInfo(h, what, obj);
+        mCM.registerForRedirectedNumberInfo(h, what, obj);
     }
 
-    @Override
     public void unregisterForRedirectedNumberInfo(Handler h) {
-        mCi.unregisterForRedirectedNumberInfo(h);
+        mCM.unregisterForRedirectedNumberInfo(h);
     }
 
-    @Override
     public void registerForLineControlInfo(Handler h, int what, Object obj) {
-        mCi.registerForLineControlInfo( h, what, obj);
+        mCM.registerForLineControlInfo( h, what, obj);
     }
 
-    @Override
     public void unregisterForLineControlInfo(Handler h) {
-        mCi.unregisterForLineControlInfo(h);
+        mCM.unregisterForLineControlInfo(h);
     }
 
-    @Override
     public void registerFoT53ClirlInfo(Handler h, int what, Object obj) {
-        mCi.registerFoT53ClirlInfo(h, what, obj);
+        mCM.registerFoT53ClirlInfo(h, what, obj);
     }
 
-    @Override
     public void unregisterForT53ClirInfo(Handler h) {
-        mCi.unregisterForT53ClirInfo(h);
+        mCM.unregisterForT53ClirInfo(h);
     }
 
-    @Override
     public void registerForT53AudioControlInfo(Handler h, int what, Object obj) {
-        mCi.registerForT53AudioControlInfo( h, what, obj);
+        mCM.registerForT53AudioControlInfo( h, what, obj);
     }
 
-    @Override
     public void unregisterForT53AudioControlInfo(Handler h) {
-        mCi.unregisterForT53AudioControlInfo(h);
+        mCM.unregisterForT53AudioControlInfo(h);
     }
 
-     @Override
-    public void setOnEcbModeExitResponse(Handler h, int what, Object obj){
+     public void setOnEcbModeExitResponse(Handler h, int what, Object obj){
          // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
          logUnexpectedCdmaMethodCall("setOnEcbModeExitResponse");
      }
 
-     @Override
-    public void unsetOnEcbModeExitResponse(Handler h){
+     public void unsetOnEcbModeExitResponse(Handler h){
         // This function should be overridden by the class CDMAPhone. Not implemented in GSMPhone.
          logUnexpectedCdmaMethodCall("unsetOnEcbModeExitResponse");
      }
 
-    @Override
     public String[] getActiveApnTypes() {
-        return mDcTracker.getActiveApnTypes();
+        return mDataConnectionTracker.getActiveApnTypes();
     }
 
-    @Override
     public String getActiveApnHost(String apnType) {
-        return mDcTracker.getActiveApnString(apnType);
+        return mDataConnectionTracker.getActiveApnString(apnType);
     }
 
-    @Override
     public LinkProperties getLinkProperties(String apnType) {
-        return mDcTracker.getLinkProperties(apnType);
+        return mDataConnectionTracker.getLinkProperties(apnType);
     }
 
-    @Override
     public LinkCapabilities getLinkCapabilities(String apnType) {
-        return mDcTracker.getLinkCapabilities(apnType);
+        return mDataConnectionTracker.getLinkCapabilities(apnType);
     }
 
-    @Override
     public int enableApnType(String type) {
-        return mDcTracker.enableApnType(type);
+        return mDataConnectionTracker.enableApnType(type);
     }
 
-    @Override
     public int disableApnType(String type) {
-        return mDcTracker.disableApnType(type);
+        return mDataConnectionTracker.disableApnType(type);
     }
 
-    @Override
     public boolean isDataConnectivityPossible() {
         return isDataConnectivityPossible(PhoneConstants.APN_TYPE_DEFAULT);
     }
 
-    @Override
     public boolean isDataConnectivityPossible(String apnType) {
-        return ((mDcTracker != null) &&
-                (mDcTracker.isDataPossible(apnType)));
+        return ((mDataConnectionTracker != null) &&
+                (mDataConnectionTracker.isDataPossible(apnType)));
     }
 
     /**
@@ -1304,12 +1118,12 @@ public abstract class PhoneBase extends Handler implements Phone {
     private void sendIncomingCallRingNotification(int token) {
         if (mIsVoiceCapable && !mDoesRilSendMultipleCallRing &&
                 (token == mCallRingContinueToken)) {
-            Rlog.d(LOG_TAG, "Sending notifyIncomingRing");
+            Log.d(LOG_TAG, "Sending notifyIncomingRing");
             notifyIncomingRing();
             sendMessageDelayed(
                     obtainMessage(EVENT_CALL_RING_CONTINUE, token, 0), mCallRingDelay);
         } else {
-            Rlog.d(LOG_TAG, "Ignoring ring notification request,"
+            Log.d(LOG_TAG, "Ignoring ring notification request,"
                     + " mDoesRilSendMultipleCallRing=" + mDoesRilSendMultipleCallRing
                     + " token=" + token
                     + " mCallRingContinueToken=" + mCallRingContinueToken
@@ -1317,7 +1131,6 @@ public abstract class PhoneBase extends Handler implements Phone {
         }
     }
 
-    @Override
     public boolean isCspPlmnEnabled() {
         // This function should be overridden by the class GSMPhone.
         // Not implemented in CDMAPhone.
@@ -1325,18 +1138,15 @@ public abstract class PhoneBase extends Handler implements Phone {
         return false;
     }
 
-    @Override
     public IsimRecords getIsimRecords() {
-        Rlog.e(LOG_TAG, "getIsimRecords() is only supported on LTE devices");
+        Log.e(LOG_TAG, "getIsimRecords() is only supported on LTE devices");
         return null;
     }
 
-    @Override
     public void requestIsimAuthentication(String nonce, Message result) {
-        Rlog.e(LOG_TAG, "requestIsimAuthentication() is only supported on LTE devices");
+        Log.e(LOG_TAG, "requestIsimAuthentication() is only supported on LTE devices");
     }
 
-    @Override
     public String getMsisdn() {
         logUnexpectedGsmMethodCall("getMsisdn");
         return null;
@@ -1347,11 +1157,10 @@ public abstract class PhoneBase extends Handler implements Phone {
      */
     private static void logUnexpectedCdmaMethodCall(String name)
     {
-        Rlog.e(LOG_TAG, "Error! " + name + "() in PhoneBase should not be " +
+        Log.e(LOG_TAG, "Error! " + name + "() in PhoneBase should not be " +
                 "called, CDMAPhone inactive.");
     }
 
-    @Override
     public PhoneConstants.DataState getDataConnectionState() {
         return getDataConnectionState(PhoneConstants.APN_TYPE_DEFAULT);
     }
@@ -1360,14 +1169,14 @@ public abstract class PhoneBase extends Handler implements Phone {
      * Common error logger method for unexpected calls to GSM/WCDMA-only methods.
      */
     private static void logUnexpectedGsmMethodCall(String name) {
-        Rlog.e(LOG_TAG, "Error! " + name + "() in PhoneBase should not be " +
+        Log.e(LOG_TAG, "Error! " + name + "() in PhoneBase should not be " +
                 "called, GSMPhone inactive.");
     }
 
     // Called by SimRecords which is constructed with a PhoneBase instead of a GSMPhone.
     public void notifyCallForwardingIndicator() {
         // This function should be overridden by the class GSMPhone. Not implemented in CDMAPhone.
-        Rlog.e(LOG_TAG, "Error! This function should never be executed, inactive CDMAPhone.");
+        Log.e(LOG_TAG, "Error! This function should never be executed, inactive CDMAPhone.");
     }
 
     public void notifyDataConnectionFailed(String reason, String apnType) {
@@ -1379,7 +1188,7 @@ public abstract class PhoneBase extends Handler implements Phone {
      */
     @Override
     public int getLteOnCdmaMode() {
-        return mCi.getLteOnCdmaMode();
+        return mCM.getLteOnCdmaMode();
     }
 
     /**
@@ -1409,9 +1218,9 @@ public abstract class PhoneBase extends Handler implements Phone {
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("PhoneBase:");
-        pw.println(" mCi=" + mCi);
+        pw.println(" mCM=" + mCM);
         pw.println(" mDnsCheckDisabled=" + mDnsCheckDisabled);
-        pw.println(" mDcTracker=" + mDcTracker);
+        pw.println(" mDataConnectionTracker=" + mDataConnectionTracker);
         pw.println(" mDoesRilSendMultipleCallRing=" + mDoesRilSendMultipleCallRing);
         pw.println(" mCallRingContinueToken=" + mCallRingContinueToken);
         pw.println(" mCallRingDelay=" + mCallRingDelay);
@@ -1421,6 +1230,7 @@ public abstract class PhoneBase extends Handler implements Phone {
         pw.println(" mUiccApplication=" + mUiccApplication.get());
         pw.println(" mSmsStorageMonitor=" + mSmsStorageMonitor);
         pw.println(" mSmsUsageMonitor=" + mSmsUsageMonitor);
+        pw.println(" mSMS=" + mSMS);
         pw.flush();
         pw.println(" mLooper=" + mLooper);
         pw.println(" mContext=" + mContext);

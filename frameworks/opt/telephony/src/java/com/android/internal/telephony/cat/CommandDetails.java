@@ -24,7 +24,7 @@ abstract class ValueObject {
 }
 
 /**
- * Class for Command Details object of proactive commands from SIM.
+ * Class for Command Detailes object of proactive commands from SIM.
  * {@hide}
  */
 class CommandDetails extends ValueObject implements Parcelable {
@@ -33,7 +33,6 @@ class CommandDetails extends ValueObject implements Parcelable {
     public int typeOfCommand;
     public int commandQualifier;
 
-    @Override
     public ComprehensionTlvTag getTag() {
         return ComprehensionTlvTag.COMMAND_DETAILS;
     }
@@ -55,7 +54,6 @@ class CommandDetails extends ValueObject implements Parcelable {
         commandQualifier = in.readInt();
     }
 
-    @Override
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeInt(compRequired ? 1 : 0);
         dest.writeInt(commandNumber);
@@ -65,18 +63,15 @@ class CommandDetails extends ValueObject implements Parcelable {
 
     public static final Parcelable.Creator<CommandDetails> CREATOR =
                                 new Parcelable.Creator<CommandDetails>() {
-        @Override
         public CommandDetails createFromParcel(Parcel in) {
             return new CommandDetails(in);
         }
 
-        @Override
         public CommandDetails[] newArray(int size) {
             return new CommandDetails[size];
         }
     };
 
-    @Override
     public int describeContents() {
         return 0;
     }
@@ -94,7 +89,6 @@ class DeviceIdentities extends ValueObject {
     public int sourceId;
     public int destinationId;
 
-    @Override
     ComprehensionTlvTag getTag() {
         return ComprehensionTlvTag.DEVICE_IDENTITIES;
     }
@@ -105,7 +99,6 @@ class IconId extends ValueObject {
     int recordNumber;
     boolean selfExplanatory;
 
-    @Override
     ComprehensionTlvTag getTag() {
         return ComprehensionTlvTag.ICON_ID;
     }
@@ -116,7 +109,6 @@ class ItemsIconId extends ValueObject {
     int [] recordNumbers;
     boolean selfExplanatory;
 
-    @Override
     ComprehensionTlvTag getTag() {
         return ComprehensionTlvTag.ITEM_ICON_ID_LIST;
     }

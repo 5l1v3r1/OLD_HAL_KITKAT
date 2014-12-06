@@ -68,21 +68,21 @@ class SmsCbHeader {
      */
     private static final int PDU_LENGTH_ETWS = 56;
 
-    private final int mGeographicalScope;
+    private final int geographicalScope;
 
     /** The serial number combines geographical scope, message code, and update number. */
-    private final int mSerialNumber;
+    private final int serialNumber;
 
     /** The Message Identifier in 3GPP is the same as the Service Category in CDMA. */
-    private final int mMessageIdentifier;
+    private final int messageIdentifier;
 
-    private final int mDataCodingScheme;
+    private final int dataCodingScheme;
 
-    private final int mPageIndex;
+    private final int pageIndex;
 
-    private final int mNrOfPages;
+    private final int nrOfPages;
 
-    private final int mFormat;
+    private final int format;
 
     /** ETWS warning notification info. */
     private final SmsCbEtwsInfo mEtwsInfo;
@@ -100,14 +100,14 @@ class SmsCbHeader {
             // Per TS23.041 9.4.1.2 and 9.4.1.3.2, GSM and ETWS format both
             // contain serial number which contains GS, Message Code, and Update Number
             // per 9.4.1.2.1, and message identifier in same octets
-            mGeographicalScope = (pdu[0] & 0xc0) >>> 6;
-            mSerialNumber = ((pdu[0] & 0xff) << 8) | (pdu[1] & 0xff);
-            mMessageIdentifier = ((pdu[2] & 0xff) << 8) | (pdu[3] & 0xff);
+            geographicalScope = (pdu[0] & 0xc0) >>> 6;
+            serialNumber = ((pdu[0] & 0xff) << 8) | (pdu[1] & 0xff);
+            messageIdentifier = ((pdu[2] & 0xff) << 8) | (pdu[3] & 0xff);
             if (isEtwsMessage() && pdu.length <= PDU_LENGTH_ETWS) {
-                mFormat = FORMAT_ETWS_PRIMARY;
-                mDataCodingScheme = -1;
-                mPageIndex = -1;
-                mNrOfPages = -1;
+                format = FORMAT_ETWS_PRIMARY;
+                dataCodingScheme = -1;
+                pageIndex = -1;
+                nrOfPages = -1;
                 boolean emergencyUserAlert = (pdu[4] & 0x1) != 0;
                 boolean activatePopup = (pdu[5] & 0x80) != 0;
                 int warningType = (pdu[4] & 0xfe) >>> 1;
@@ -124,8 +124,8 @@ class SmsCbHeader {
                 return;     // skip the ETWS/CMAS initialization code for regular notifications
             } else {
                 // GSM pdus are no more than 88 bytes
-                mFormat = FORMAT_GSM;
-                mDataCodingScheme = pdu[4] & 0xff;
+                format = FORMAT_GSM;
+                dataCodingScheme = pdu[4] & 0xff;
 
                 // Check for invalid page parameter
                 int pageIndex = (pdu[5] & 0xf0) >>> 4;
@@ -136,13 +136,13 @@ class SmsCbHeader {
                     nrOfPages = 1;
                 }
 
-                mPageIndex = pageIndex;
-                mNrOfPages = nrOfPages;
+                this.pageIndex = pageIndex;
+                this.nrOfPages = nrOfPages;
             }
         } else {
             // UMTS pdus are always at least 90 bytes since the payload includes
             // a number-of-pages octet and also one length octet per page
-            mFormat = FORMAT_UMTS;
+            format = FORMAT_UMTS;
 
             int messageType = pdu[0];
 
@@ -150,16 +150,16 @@ class SmsCbHeader {
                 throw new IllegalArgumentException("Unsupported message type " + messageType);
             }
 
-            mMessageIdentifier = ((pdu[1] & 0xff) << 8) | pdu[2] & 0xff;
-            mGeographicalScope = (pdu[3] & 0xc0) >>> 6;
-            mSerialNumber = ((pdu[3] & 0xff) << 8) | (pdu[4] & 0xff);
-            mDataCodingScheme = pdu[5] & 0xff;
+            messageIdentifier = ((pdu[1] & 0xff) << 8) | pdu[2] & 0xff;
+            geographicalScope = (pdu[3] & 0xc0) >>> 6;
+            serialNumber = ((pdu[3] & 0xff) << 8) | (pdu[4] & 0xff);
+            dataCodingScheme = pdu[5] & 0xff;
 
             // We will always consider a UMTS message as having one single page
             // since there's only one instance of the header, even though the
             // actual payload may contain several pages.
-            mPageIndex = 1;
-            mNrOfPages = 1;
+            pageIndex = 1;
+            nrOfPages = 1;
         }
 
         if (isEtwsMessage()) {
@@ -183,27 +183,27 @@ class SmsCbHeader {
     }
 
     int getGeographicalScope() {
-        return mGeographicalScope;
+        return geographicalScope;
     }
 
     int getSerialNumber() {
-        return mSerialNumber;
+        return serialNumber;
     }
 
     int getServiceCategory() {
-        return mMessageIdentifier;
+        return messageIdentifier;
     }
 
     int getDataCodingScheme() {
-        return mDataCodingScheme;
+        return dataCodingScheme;
     }
 
     int getPageIndex() {
-        return mPageIndex;
+        return pageIndex;
     }
 
     int getNumberOfPages() {
-        return mNrOfPages;
+        return nrOfPages;
     }
 
     SmsCbEtwsInfo getEtwsInfo() {
@@ -219,8 +219,8 @@ class SmsCbHeader {
      * @return true if this message is emergency type; false otherwise
      */
     boolean isEmergencyMessage() {
-        return mMessageIdentifier >= SmsCbConstants.MESSAGE_ID_PWS_FIRST_IDENTIFIER
-                && mMessageIdentifier <= SmsCbConstants.MESSAGE_ID_PWS_LAST_IDENTIFIER;
+        return messageIdentifier >= SmsCbConstants.MESSAGE_ID_PWS_FIRST_IDENTIFIER
+                && messageIdentifier <= SmsCbConstants.MESSAGE_ID_PWS_LAST_IDENTIFIER;
     }
 
     /**
@@ -228,7 +228,7 @@ class SmsCbHeader {
      * @return true if this message is ETWS emergency type; false otherwise
      */
     private boolean isEtwsMessage() {
-        return (mMessageIdentifier & SmsCbConstants.MESSAGE_ID_ETWS_TYPE_MASK)
+        return (messageIdentifier & SmsCbConstants.MESSAGE_ID_ETWS_TYPE_MASK)
                 == SmsCbConstants.MESSAGE_ID_ETWS_TYPE;
     }
 
@@ -237,7 +237,7 @@ class SmsCbHeader {
      * @return true if this message is an ETWS primary notification; false otherwise
      */
     boolean isEtwsPrimaryNotification() {
-        return mFormat == FORMAT_ETWS_PRIMARY;
+        return format == FORMAT_ETWS_PRIMARY;
     }
 
     /**
@@ -245,7 +245,7 @@ class SmsCbHeader {
      * @return true if this message is in UMTS format; false otherwise
      */
     boolean isUmtsFormat() {
-        return mFormat == FORMAT_UMTS;
+        return format == FORMAT_UMTS;
     }
 
     /**
@@ -253,8 +253,8 @@ class SmsCbHeader {
      * @return true if this message is CMAS emergency type; false otherwise
      */
     private boolean isCmasMessage() {
-        return mMessageIdentifier >= SmsCbConstants.MESSAGE_ID_CMAS_FIRST_IDENTIFIER
-                && mMessageIdentifier <= SmsCbConstants.MESSAGE_ID_CMAS_LAST_IDENTIFIER;
+        return messageIdentifier >= SmsCbConstants.MESSAGE_ID_CMAS_FIRST_IDENTIFIER
+                && messageIdentifier <= SmsCbConstants.MESSAGE_ID_CMAS_LAST_IDENTIFIER;
     }
 
     /**
@@ -264,7 +264,7 @@ class SmsCbHeader {
      * @return true if the message code indicates a popup alert should be displayed
      */
     private boolean isEtwsPopupAlert() {
-        return (mSerialNumber & SmsCbConstants.SERIAL_NUMBER_ETWS_ACTIVATE_POPUP) != 0;
+        return (serialNumber & SmsCbConstants.SERIAL_NUMBER_ETWS_ACTIVATE_POPUP) != 0;
     }
 
     /**
@@ -274,7 +274,7 @@ class SmsCbHeader {
      * @return true if the message code indicates an emergency user alert
      */
     private boolean isEtwsEmergencyUserAlert() {
-        return (mSerialNumber & SmsCbConstants.SERIAL_NUMBER_ETWS_EMERGENCY_USER_ALERT) != 0;
+        return (serialNumber & SmsCbConstants.SERIAL_NUMBER_ETWS_EMERGENCY_USER_ALERT) != 0;
     }
 
     /**
@@ -284,7 +284,7 @@ class SmsCbHeader {
      * @return the ETWS warning type defined in 3GPP TS 23.041 section 9.3.24
      */
     private int getEtwsWarningType() {
-        return mMessageIdentifier - SmsCbConstants.MESSAGE_ID_ETWS_EARTHQUAKE_WARNING;
+        return messageIdentifier - SmsCbConstants.MESSAGE_ID_ETWS_EARTHQUAKE_WARNING;
     }
 
     /**
@@ -293,16 +293,16 @@ class SmsCbHeader {
      * @return the CMAS message class as defined in {@link SmsCbCmasInfo}
      */
     private int getCmasMessageClass() {
-        switch (mMessageIdentifier) {
+        switch (messageIdentifier) {
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_PRESIDENTIAL_LEVEL:
                 return SmsCbCmasInfo.CMAS_CLASS_PRESIDENTIAL_LEVEL_ALERT;
 
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_IMMEDIATE_OBSERVED:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_IMMEDIATE_LIKELY:
-                return SmsCbCmasInfo.CMAS_CLASS_EXTREME_THREAT;
-
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_EXPECTED_OBSERVED:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_EXPECTED_LIKELY:
+                return SmsCbCmasInfo.CMAS_CLASS_EXTREME_THREAT;
+
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_SEVERE_IMMEDIATE_OBSERVED:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_SEVERE_IMMEDIATE_LIKELY:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_SEVERE_EXPECTED_OBSERVED:
@@ -333,7 +333,7 @@ class SmsCbHeader {
      * @return the CMAS severity as defined in {@link SmsCbCmasInfo}
      */
     private int getCmasSeverity() {
-        switch (mMessageIdentifier) {
+        switch (messageIdentifier) {
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_IMMEDIATE_OBSERVED:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_IMMEDIATE_LIKELY:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_EXPECTED_OBSERVED:
@@ -358,7 +358,7 @@ class SmsCbHeader {
      * @return the CMAS urgency as defined in {@link SmsCbCmasInfo}
      */
     private int getCmasUrgency() {
-        switch (mMessageIdentifier) {
+        switch (messageIdentifier) {
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_IMMEDIATE_OBSERVED:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_IMMEDIATE_LIKELY:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_SEVERE_IMMEDIATE_OBSERVED:
@@ -383,7 +383,7 @@ class SmsCbHeader {
      * @return the CMAS certainty as defined in {@link SmsCbCmasInfo}
      */
     private int getCmasCertainty() {
-        switch (mMessageIdentifier) {
+        switch (messageIdentifier) {
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_IMMEDIATE_OBSERVED:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_EXTREME_EXPECTED_OBSERVED:
             case SmsCbConstants.MESSAGE_ID_CMAS_ALERT_SEVERE_IMMEDIATE_OBSERVED:
@@ -403,10 +403,10 @@ class SmsCbHeader {
 
     @Override
     public String toString() {
-        return "SmsCbHeader{GS=" + mGeographicalScope + ", serialNumber=0x" +
-                Integer.toHexString(mSerialNumber) +
-                ", messageIdentifier=0x" + Integer.toHexString(mMessageIdentifier) +
-                ", DCS=0x" + Integer.toHexString(mDataCodingScheme) +
-                ", page " + mPageIndex + " of " + mNrOfPages + '}';
+        return "SmsCbHeader{GS=" + geographicalScope + ", serialNumber=0x" +
+                Integer.toHexString(serialNumber) +
+                ", messageIdentifier=0x" + Integer.toHexString(messageIdentifier) +
+                ", DCS=0x" + Integer.toHexString(dataCodingScheme) +
+                ", page " + pageIndex + " of " + nrOfPages + '}';
     }
 }

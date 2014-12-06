@@ -16,12 +16,11 @@
 
 package com.android.internal.telephony;
 
-import com.android.internal.telephony.cdma.CdmaSmsBroadcastConfigInfo;
 import com.android.internal.telephony.gsm.SmsBroadcastConfigInfo;
-import com.android.internal.telephony.uicc.IccCardStatus;
 
 import android.os.Message;
 import android.os.Handler;
+import android.util.Log;
 
 /**
  * {@hide}
@@ -109,16 +108,7 @@ public interface CommandsInterface {
     //***** Methods
     RadioState getRadioState();
 
-    /**
-     * response.obj.result is an int[2]
-     *
-     * response.obj.result[0] is IMS registration state
-     *                        0 - Not registered
-     *                        1 - Registered
-     * response.obj.result[1] is of type RILConstants.GSM_PHONE or
-     *                                    RILConstants.CDMA_PHONE
-     */
-    void getImsRegistrationState(Message result);
+    void getVoiceRadioTechnology(Message result);
 
     /**
      * Fires on any RadioState transition
@@ -133,8 +123,6 @@ public interface CommandsInterface {
 
     void registerForVoiceRadioTechChanged(Handler h, int what, Object obj);
     void unregisterForVoiceRadioTechChanged(Handler h);
-    void registerForImsNetworkStateChanged(Handler h, int what, Object obj);
-    void unregisterForImsNetworkStateChanged(Handler h);
 
     /**
      * Fires on any transition into RadioState.isOn()
@@ -573,9 +561,6 @@ public interface CommandsInterface {
      *  This exception is CommandException with an error of PASSWORD_INCORRECT
      *  if the password is incorrect
      *
-     *  ar.result is an optional array of integers where the first entry
-     *  is the number of attempts remaining before the ICC will be PUK locked.
-     *
      * ar.exception and ar.result are null on success
      */
 
@@ -592,9 +577,6 @@ public interface CommandsInterface {
      *  This exception is CommandException with an error of PASSWORD_INCORRECT
      *  if the password is incorrect
      *
-     *  ar.result is an optional array of integers where the first entry
-     *  is the number of attempts remaining before the ICC will be PUK locked.
-     *
      * ar.exception and ar.result are null on success
      */
 
@@ -609,9 +591,6 @@ public interface CommandsInterface {
      *  This exception is CommandException with an error of PASSWORD_INCORRECT
      *  if the password is incorrect
      *
-     *  ar.result is an optional array of integers where the first entry
-     *  is the number of attempts remaining before the ICC is permanently disabled.
-     *
      * ar.exception and ar.result are null on success
      */
 
@@ -622,13 +601,11 @@ public interface CommandsInterface {
      *
      *  AID (Application ID), See ETSI 102.221 8.1 and 101.220 4
      *
+     *  returned message
      *  retMsg.obj = AsyncResult ar
      *  ar.exception carries exception on failure
      *  This exception is CommandException with an error of PASSWORD_INCORRECT
      *  if the password is incorrect
-     *
-     *  ar.result is an optional array of integers where the first entry
-     *  is the number of attempts remaining before the ICC is permanently disabled.
      *
      * ar.exception and ar.result are null on success
      */
@@ -645,9 +622,6 @@ public interface CommandsInterface {
      *  ar.exception carries exception on failure
      *  This exception is CommandException with an error of PASSWORD_INCORRECT
      *  if the password is incorrect
-     *
-     *  ar.result is an optional array of integers where the first entry
-     *  is the number of attempts remaining before the ICC will be PUK locked.
      *
      * ar.exception and ar.result are null on success
      */
@@ -667,9 +641,6 @@ public interface CommandsInterface {
      *  This exception is CommandException with an error of PASSWORD_INCORRECT
      *  if the password is incorrect
      *
-     *  ar.result is an optional array of integers where the first entry
-     *  is the number of attempts remaining before the ICC will be PUK locked.
-     *
      * ar.exception and ar.result are null on success
      */
 
@@ -685,9 +656,6 @@ public interface CommandsInterface {
      *  ar.exception carries exception on failure
      *  This exception is CommandException with an error of PASSWORD_INCORRECT
      *  if the password is incorrect
-     *
-     *  ar.result is an optional array of integers where the first entry
-     *  is the number of attempts remaining before the ICC is permanently disabled.
      *
      * ar.exception and ar.result are null on success
      */
@@ -707,15 +675,11 @@ public interface CommandsInterface {
      *  This exception is CommandException with an error of PASSWORD_INCORRECT
      *  if the password is incorrect
      *
-     *  ar.result is an optional array of integers where the first entry
-     *  is the number of attempts remaining before the ICC is permanently disabled.
-     *
      * ar.exception and ar.result are null on success
      */
 
     void supplyIccPuk2ForApp(String puk2, String newPin2, String aid, Message result);
 
-    // TODO: Add java doc and indicate that msg.arg1 contains the number of attempts remaining.
     void changeIccPin(String oldPin, String newPin, Message result);
     void changeIccPinForApp(String oldPin, String newPin, String aidPtr, Message result);
     void changeIccPin2(String oldPin2, String newPin2, Message result);
@@ -740,7 +704,7 @@ public interface CommandsInterface {
      *  retMsg.obj = AsyncResult ar
      *  ar.exception carries exception on failure
      *  ar.userObject contains the orignal value of result.obj
-     *  ar.result contains a List of DataCallResponse
+     *  ar.result contains a List of DataCallState
      *  @deprecated Do not use.
      */
     @Deprecated
@@ -751,7 +715,7 @@ public interface CommandsInterface {
      *  retMsg.obj = AsyncResult ar
      *  ar.exception carries exception on failure
      *  ar.userObject contains the orignal value of result.obj
-     *  ar.result contains a List of DataCallResponse
+     *  ar.result contains a List of DataCallState
      */
     void getDataCallList(Message result);
 
@@ -1035,31 +999,6 @@ public interface CommandsInterface {
      * @param response sent when operation completes
      */
     void sendCdmaSms(byte[] pdu, Message response);
-
-    /**
-     * send SMS over IMS with 3GPP/GSM SMS format
-     * @param smscPDU is smsc address in PDU form GSM BCD format prefixed
-     *      by a length byte (as expected by TS 27.005) or NULL for default SMSC
-     * @param pdu is SMS in PDU format as an ASCII hex string
-     *      less the SMSC address
-     * @param retry indicates if this is a retry; 0 == not retry, nonzero = retry
-     * @param messageRef valid field if retry is set to nonzero.
-     *        Contains messageRef from RIL_SMS_Response corresponding to failed MO SMS
-     * @param response sent when operation completes
-     */
-    void sendImsGsmSms (String smscPDU, String pdu, int retry, int messageRef,
-            Message response);
-
-    /**
-     * send SMS over IMS with 3GPP2/CDMA SMS format
-     * @param pdu is CDMA-SMS in internal pseudo-PDU format
-     * @param response sent when operation completes
-     * @param retry indicates if this is a retry; 0 == not retry, nonzero = retry
-     * @param messageRef valid field if retry is set to nonzero.
-     *        Contains messageRef from RIL_SMS_Response corresponding to failed MO SMS
-     * @param response sent when operation completes
-     */
-    void sendImsCdmaSms(byte[] pdu, int retry, int messageRef, Message response);
 
     /**
      * Deletes the specified SMS record from SIM memory (EF_SMS).
@@ -1531,8 +1470,8 @@ public interface CommandsInterface {
 
     /**
      * Setup a packet data connection On successful completion, the result
-     * message will return a {@link com.android.internal.telephony.dataconnection.DataCallResponse}
-     * object containing the connection information.
+     * message will return a {@link DataCallState} object containing the connection
+     * information.
      *
      * @param radioTechnology
      *            indicates whether to setup connection on radio technology CDMA
@@ -1583,10 +1522,11 @@ public interface CommandsInterface {
     /**
      * Configure cdma cell broadcast SMS.
      *
-     * @param response
+     * @param result
      *            Callback message is empty on completion
      */
-    public void setCdmaBroadcastConfig(CdmaSmsBroadcastConfigInfo[] configs, Message response);
+    // TODO: Change the configValuesArray to a RIL_BroadcastSMSConfig
+    public void setCdmaBroadcastConfig(int[] configValuesArray, Message result);
 
     /**
      * Query the current configuration of cdma cell broadcast SMS.
@@ -1617,8 +1557,8 @@ public interface CommandsInterface {
      * is a tri-state return value as for a period of time
      * the mode may be unknown.
      *
-     * @return {@link PhoneConstants#LTE_ON_CDMA_UNKNOWN}, {@link PhoneConstants#LTE_ON_CDMA_FALSE}
-     * or {@link PhoneConstants#LTE_ON_CDMA_TRUE}
+     * @return {@link Phone#LTE_ON_CDMA_UNKNOWN}, {@link Phone#LTE_ON_CDMA_FALSE}
+     * or {@link Phone#LTE_ON_CDMA_TRUE}
      */
     public int getLteOnCdmaMode();
 
@@ -1633,76 +1573,7 @@ public interface CommandsInterface {
     public void requestIsimAuthentication(String nonce, Message response);
 
     /**
-     * Get the current Voice Radio Technology.
-     *
-     * AsyncResult.result is an int array with the first value
-     * being one of the ServiceState.RIL_RADIO_TECHNOLOGY_xxx values.
-     *
-     * @param result is sent back to handler and result.obj is a AsyncResult
-     */
-    void getVoiceRadioTechnology(Message result);
-
-    /**
-     * Return the current set of CellInfo records
-     *
-     * AsyncResult.result is a of Collection<CellInfo>
-     *
-     * @param result is sent back to handler and result.obj is a AsyncResult
-     */
-    void getCellInfoList(Message result);
-
-    /**
-     * Sets the minimum time in milli-seconds between when RIL_UNSOL_CELL_INFO_LIST
-     * should be invoked.
-     *
-     * The default, 0, means invoke RIL_UNSOL_CELL_INFO_LIST when any of the reported 
-     * information changes. Setting the value to INT_MAX(0x7fffffff) means never issue
-     * A RIL_UNSOL_CELL_INFO_LIST.
-     *
-     * 
-
-     * @param rateInMillis is sent back to handler and result.obj is a AsyncResult
-     * @param response.obj is AsyncResult ar when sent to associated handler
-     *                        ar.exception carries exception on failure or null on success
-     *                        otherwise the error.
-     */
-    void setCellInfoListRate(int rateInMillis, Message response);
-
-    /**
-     * Fires when RIL_UNSOL_CELL_INFO_LIST is received from the RIL.
-     */
-    void registerForCellInfoList(Handler h, int what, Object obj);
-    void unregisterForCellInfoList(Handler h);
-
-    /**
-     * Set Initial Attach Apn
-     *
-     * @param apn
-     *            the APN to connect to if radio technology is GSM/UMTS.
-     * @param protocol
-     *            one of the PDP_type values in TS 27.007 section 10.1.1.
-     *            For example, "IP", "IPV6", "IPV4V6", or "PPP".
-     * @param authType
-     *            authentication protocol used for this PDP context
-     *            (None: 0, PAP: 1, CHAP: 2, PAP&CHAP: 3)
-     * @param username
-     *            the username for APN, or NULL
-     * @param password
-     *            the password for APN, or NULL
-     * @param result
-     *            callback message contains the information of SUCCESS/FAILURE
-     */
-    public void setInitialAttachApn(String apn, String protocol, int authType, String username,
-            String password, Message result);
-
-    /**
      * Notifiy that we are testing an emergency call
      */
     public void testingEmergencyCall();
-
-
-    /**
-     * @return version of the ril.
-     */
-    int getRilVersion();
 }

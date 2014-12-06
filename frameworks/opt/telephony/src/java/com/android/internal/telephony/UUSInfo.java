@@ -56,45 +56,45 @@ public class UUSInfo {
 
     public static final int UUS_DCS_IA5c = 4; /* IA5 characters */
 
-    private int mUusType;
+    private int uusType;
 
-    private int mUusDcs;
+    private int uusDcs;
 
-    private byte[] mUusData;
+    private byte[] uusData;
 
     public UUSInfo() {
-        mUusType = UUS_TYPE1_IMPLICIT;
-        mUusDcs = UUS_DCS_IA5c;
-        mUusData = null;
+        this.uusType = UUS_TYPE1_IMPLICIT;
+        this.uusDcs = UUS_DCS_IA5c;
+        this.uusData = null;
     }
 
     public UUSInfo(int uusType, int uusDcs, byte[] uusData) {
-        mUusType = uusType;
-        mUusDcs = uusDcs;
-        mUusData = uusData;
+        this.uusType = uusType;
+        this.uusDcs = uusDcs;
+        this.uusData = uusData;
     }
 
     public int getDcs() {
-        return mUusDcs;
+        return uusDcs;
     }
 
     public void setDcs(int uusDcs) {
-        mUusDcs = uusDcs;
+        this.uusDcs = uusDcs;
     }
 
     public int getType() {
-        return mUusType;
+        return uusType;
     }
 
     public void setType(int uusType) {
-        mUusType = uusType;
+        this.uusType = uusType;
     }
 
     public byte[] getUserData() {
-        return mUusData;
+        return uusData;
     }
 
     public void setUserData(byte[] uusData) {
-        mUusData = uusData;
+        this.uusData = uusData;
     }
 }

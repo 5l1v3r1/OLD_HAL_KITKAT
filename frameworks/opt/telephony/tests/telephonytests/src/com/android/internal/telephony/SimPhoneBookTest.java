@@ -19,9 +19,6 @@ package com.android.internal.telephony;
 import android.os.ServiceManager;
 import android.test.suitebuilder.annotation.Suppress;
 
-import com.android.internal.telephony.uicc.AdnRecord;
-import com.android.internal.telephony.uicc.IccConstants;
-
 import java.util.List;
 
 import junit.framework.TestCase;

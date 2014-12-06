@@ -57,7 +57,6 @@ public class SuppServiceNotification {
     static public final int MT_CODE_DEFLECTED_CALL              = 9;
     static public final int MT_CODE_ADDITIONAL_CALL_FORWARDED   = 10;
 
-    @Override
     public String toString()
     {
         return super.toString() + " mobile"

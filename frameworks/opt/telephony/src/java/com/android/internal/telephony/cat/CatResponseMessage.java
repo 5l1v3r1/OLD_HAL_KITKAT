@@ -17,44 +17,38 @@
 package com.android.internal.telephony.cat;
 
 public class CatResponseMessage {
-        CommandDetails mCmdDet = null;
-        ResultCode mResCode  = ResultCode.OK;
-        int mUsersMenuSelection = 0;
-        String mUsersInput  = null;
-        boolean mUsersYesNoSelection = false;
-        boolean mUsersConfirm = false;
-        boolean mIncludeAdditionalInfo = false;
-        int mAdditionalInfo = 0;
+        CommandDetails cmdDet = null;
+        ResultCode resCode  = ResultCode.OK;
+        int usersMenuSelection = 0;
+        String usersInput  = null;
+        boolean usersYesNoSelection = false;
+        boolean usersConfirm = false;
+
         public CatResponseMessage(CatCmdMessage cmdMsg) {
-            mCmdDet = cmdMsg.mCmdDet;
+            this.cmdDet = cmdMsg.mCmdDet;
         }
 
         public void setResultCode(ResultCode resCode) {
-            mResCode = resCode;
+            this.resCode = resCode;
         }
 
         public void setMenuSelection(int selection) {
-            mUsersMenuSelection = selection;
+            this.usersMenuSelection = selection;
         }
 
         public void setInput(String input) {
-            mUsersInput = input;
+            this.usersInput = input;
         }
 
         public void setYesNo(boolean yesNo) {
-            mUsersYesNoSelection = yesNo;
+            usersYesNoSelection = yesNo;
         }
 
         public void setConfirmation(boolean confirm) {
-            mUsersConfirm = confirm;
-        }
-
-        public void setAdditionalInfo(int info) {
-            mIncludeAdditionalInfo = true;
-            mAdditionalInfo = info;
+            usersConfirm = confirm;
         }
 
         CommandDetails getCmdDetails() {
-            return mCmdDet;
+            return cmdDet;
         }
     }

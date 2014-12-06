@@ -17,6 +17,8 @@
 package com.android.internal.telephony.cdma;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import android.util.Log;
 import android.media.ToneGenerator;
 
 public class SignalToneUtil {
@@ -34,7 +36,7 @@ public class SignalToneUtil {
     static public final int IS95_CONST_IR_ALERT_HIGH = 1;
     static public final int IS95_CONST_IR_ALERT_LOW = 2;
 
-    // Based on 3GPP2 C.S0005-E, section 3.7.5.5 Signal,
+    // Based on 3GPP2 C.S0005-E, seciton 3.7.5.5 Signal,
     // set TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN to 0 to avoid
     // the alert pitch to be involved in hash calculation for
     // signal type other than IS54B.
@@ -77,7 +79,7 @@ public class SignalToneUtil {
     static public final int IS95_CONST_IR_SIG_TONE_ABBR_ALRT = 0;
 
     // Hashmap to map signalInfo To AudioTone
-    static private HashMap<Integer, Integer> mHm = new HashMap<Integer, Integer>();
+    static private HashMap<Integer, Integer> hm = new HashMap<Integer, Integer>();
 
     private static Integer signalParamHash(int signalType, int alertPitch, int signal) {
         if ((signalType < 0) || (signalType > 256) || (alertPitch > 256) ||
@@ -97,7 +99,7 @@ public class SignalToneUtil {
     }
 
     public static int getAudioToneFromSignalInfo(int signalType, int alertPitch, int signal) {
-        Integer result = mHm.get(signalParamHash(signalType, alertPitch, signal));
+        Integer result = hm.get(signalParamHash(signalType, alertPitch, signal));
         if (result == null) {
             return CDMA_INVALID_TONE;
         }
@@ -107,180 +109,180 @@ public class SignalToneUtil {
     static {
 
         /* SIGNAL_TYPE_ISDN */
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_ISDN_NORMAL), ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                         IS95_CONST_IR_SIG_ISDN_INTGRP),
                         ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_INTERGROUP);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_ISDN_SP_PRI), ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_SP_PRI);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_ISDN_PAT_3), ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PAT3);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_ISDN_PING), ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_ISDN_PAT_5), ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PAT5);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_ISDN_PAT_6), ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PAT6);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_ISDN_PAT_7), ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PAT7);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_ISDN, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_ISDN_OFF), ToneGenerator.TONE_CDMA_SIGNAL_OFF);
 
         /* SIGNAL_TYPE_TONE */
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_DIAL), ToneGenerator.TONE_CDMA_DIAL_TONE_LITE);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_RING), ToneGenerator.TONE_CDMA_NETWORK_USA_RINGBACK);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_INT), ToneGenerator.TONE_SUP_INTERCEPT);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_ABB_INT), ToneGenerator.TONE_SUP_INTERCEPT_ABBREV);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_REORDER), ToneGenerator.TONE_CDMA_REORDER);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_ABB_RE), ToneGenerator.TONE_CDMA_ABBR_REORDER);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_BUSY), ToneGenerator.TONE_CDMA_NETWORK_BUSY);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_CONFIRM), ToneGenerator.TONE_SUP_CONFIRM);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_ANSWER), ToneGenerator.TONE_CDMA_ANSWER);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_CALL_W), ToneGenerator.TONE_CDMA_NETWORK_CALLWAITING);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_PIP), ToneGenerator.TONE_CDMA_PIP);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_TONE, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_TONE_NO_TONE), ToneGenerator.TONE_CDMA_SIGNAL_OFF);
 
         /* SIGNAL_TYPE_IS54B */
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_L), ToneGenerator.TONE_CDMA_HIGH_L);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_L), ToneGenerator.TONE_CDMA_MED_L);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_L), ToneGenerator.TONE_CDMA_LOW_L);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_SS), ToneGenerator.TONE_CDMA_HIGH_SS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_SS), ToneGenerator.TONE_CDMA_MED_SS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_SS), ToneGenerator.TONE_CDMA_LOW_SS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_SSL), ToneGenerator.TONE_CDMA_HIGH_SSL);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_SSL), ToneGenerator.TONE_CDMA_MED_SSL);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_SSL), ToneGenerator.TONE_CDMA_LOW_SSL);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_SS_2), ToneGenerator.TONE_CDMA_HIGH_SS_2);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_SS_2), ToneGenerator.TONE_CDMA_MED_SS_2);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_SS_2), ToneGenerator.TONE_CDMA_LOW_SS_2);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_SLS), ToneGenerator.TONE_CDMA_HIGH_SLS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_SLS), ToneGenerator.TONE_CDMA_MED_SLS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_SLS), ToneGenerator.TONE_CDMA_LOW_SLS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_S_X4), ToneGenerator.TONE_CDMA_HIGH_S_X4);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_S_X4), ToneGenerator.TONE_CDMA_MED_S_X4);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_S_X4), ToneGenerator.TONE_CDMA_LOW_S_X4);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_PBX_L), ToneGenerator.TONE_CDMA_HIGH_PBX_L);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_PBX_L), ToneGenerator.TONE_CDMA_MED_PBX_L);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_PBX_L), ToneGenerator.TONE_CDMA_LOW_PBX_L);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_PBX_SS), ToneGenerator.TONE_CDMA_HIGH_PBX_SS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_PBX_SS), ToneGenerator.TONE_CDMA_MED_PBX_SS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_PBX_SS), ToneGenerator.TONE_CDMA_LOW_PBX_SS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_PBX_SSL), ToneGenerator.TONE_CDMA_HIGH_PBX_SSL);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_PBX_SSL), ToneGenerator.TONE_CDMA_MED_PBX_SSL);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_PBX_SSL), ToneGenerator.TONE_CDMA_LOW_PBX_SSL);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_PBX_SLS), ToneGenerator.TONE_CDMA_HIGH_PBX_SLS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_PBX_SLS), ToneGenerator.TONE_CDMA_MED_PBX_SLS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_PBX_SLS), ToneGenerator.TONE_CDMA_LOW_PBX_SLS);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_HIGH,
                 IS95_CONST_IR_SIG_IS54B_PBX_S_X4), ToneGenerator.TONE_CDMA_HIGH_PBX_S_X4);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_MED,
                 IS95_CONST_IR_SIG_IS54B_PBX_S_X4), ToneGenerator.TONE_CDMA_MED_PBX_S_X4);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, IS95_CONST_IR_ALERT_LOW,
                 IS95_CONST_IR_SIG_IS54B_PBX_S_X4), ToneGenerator.TONE_CDMA_LOW_PBX_S_X4);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_IS54B, TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN,
                 IS95_CONST_IR_SIG_IS54B_NO_TONE), ToneGenerator.TONE_CDMA_SIGNAL_OFF);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_USR_DEFD_ALERT,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_USR_DEFD_ALERT,
                 TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN, IS95_CONST_IR_SIG_TONE_ABBR_ALRT),
                 ToneGenerator.TONE_CDMA_ABBR_ALERT);
 
-        mHm.put(signalParamHash(IS95_CONST_IR_SIGNAL_USR_DEFD_ALERT,
+        hm.put(signalParamHash(IS95_CONST_IR_SIGNAL_USR_DEFD_ALERT,
                 TAPIAMSSCDMA_SIGNAL_PITCH_UNKNOWN, IS95_CONST_IR_SIG_TONE_NO_TONE),
                 ToneGenerator.TONE_CDMA_ABBR_ALERT);
 

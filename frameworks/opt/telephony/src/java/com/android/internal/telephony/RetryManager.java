@@ -16,7 +16,7 @@
 
 package com.android.internal.telephony;
 
-import android.telephony.Rlog;
+import android.util.Log;
 import android.util.Pair;
 import android.text.TextUtils;
 
@@ -73,8 +73,8 @@ import java.util.ArrayList;
  * {@hide}
  */
 public class RetryManager {
-    static public final String LOG_TAG = "RetryManager";
-    static public final boolean DBG = false;
+    static public final String LOG_TAG = "GSM";
+    static public final boolean DBG = true;
     static public final boolean VDBG = false;
 
     /**
@@ -102,13 +102,11 @@ public class RetryManager {
      */
     private int mMaxRetryCount;
 
-    private int mCurMaxRetryCount;
-
     /** The current number of retries */
     private int mRetryCount;
 
     /** Random number generator */
-    private Random mRng = new Random();
+    private Random rng = new Random();
 
     private String mConfig;
 
@@ -117,15 +115,12 @@ public class RetryManager {
         if (VDBG) log("constructor");
     }
 
-    @Override
     public String toString() {
-        String ret = "RetryManager: { forever=" + mRetryForever + " maxRetry=" + mMaxRetryCount
-                + " curMaxRetry=" + mCurMaxRetryCount + " retry=" + mRetryCount
-                + " config={" + mConfig + "} retryArray={";
+        String ret = "RetryManager: forever=" + mRetryForever + ", maxRetry=" + mMaxRetryCount +
+                ", retry=" + mRetryCount + ",\n    " + mConfig;
         for (RetryRec r : mRetryArray) {
-            ret += r.mDelayTime + ":" + r.mRandomizationTime + " ";
+            ret += "\n    " + r.mDelayTime + ":" + r.mRandomizationTime;
         }
-        ret += "}}";
         return ret;
     }
 
@@ -159,8 +154,6 @@ public class RetryManager {
         }
 
         mMaxRetryCount = maxRetryCount;
-        mCurMaxRetryCount = mMaxRetryCount;
-
         resetRetryCount();
         mRetryArray.clear();
         mRetryArray.add(new RetryRec(retryTime, randomizationTime));
@@ -215,7 +208,7 @@ public class RetryManager {
                             mMaxRetryCount = value.second;
                         }
                     } else {
-                        Rlog.e(LOG_TAG, "Unrecognized configuration name value pair: "
+                        Log.e(LOG_TAG, "Unrecognized configuration name value pair: "
                                         + strArray[i]);
                         return false;
                     }
@@ -248,7 +241,6 @@ public class RetryManager {
                 mMaxRetryCount = mRetryArray.size();
                 if (VDBG) log("configure: setting mMaxRetryCount=" + mMaxRetryCount);
             }
-            mCurMaxRetryCount = mMaxRetryCount;
             if (VDBG) log("configure: true");
             return true;
         } else {
@@ -264,7 +256,7 @@ public class RetryManager {
      *         false} otherwise.
      */
     public boolean isRetryNeeded() {
-        boolean retVal = mRetryForever || (mRetryCount < mCurMaxRetryCount);
+        boolean retVal = mRetryForever || (mRetryCount < mMaxRetryCount);
         if (DBG) log("isRetryNeeded: " + retVal);
         return retVal;
     }
@@ -304,8 +296,8 @@ public class RetryManager {
      */
     public void increaseRetryCount() {
         mRetryCount++;
-        if (mRetryCount > mCurMaxRetryCount) {
-            mRetryCount = mCurMaxRetryCount;
+        if (mRetryCount > mMaxRetryCount) {
+            mRetryCount = mMaxRetryCount;
         }
         if (DBG) log("increaseRetryCount: " + mRetryCount);
     }
@@ -315,8 +307,8 @@ public class RetryManager {
      */
     public void setRetryCount(int count) {
         mRetryCount = count;
-        if (mRetryCount > mCurMaxRetryCount) {
-            mRetryCount = mCurMaxRetryCount;
+        if (mRetryCount > mMaxRetryCount) {
+            mRetryCount = mMaxRetryCount;
         }
 
         if (mRetryCount < 0) {
@@ -324,33 +316,6 @@ public class RetryManager {
         }
 
         if (DBG) log("setRetryCount: " + mRetryCount);
-    }
-
-    /**
-     * Set current maximum retry count to the specified value
-     */
-    public void setCurMaxRetryCount(int count) {
-        mCurMaxRetryCount = count;
-
-        // Make sure it's not negative
-        if (mCurMaxRetryCount < 0) {
-            mCurMaxRetryCount = 0;
-        }
-
-        // Make sure mRetryCount is within range
-        setRetryCount(mRetryCount);
-
-        if (DBG) log("setCurMaxRetryCount: " + mCurMaxRetryCount);
-    }
-
-    /**
-     * Restore CurMaxRetryCount
-     */
-    public void restoreCurMaxRetryCount() {
-        mCurMaxRetryCount = mMaxRetryCount;
-
-        // Make sure mRetryCount is within range
-        setRetryCount(mRetryCount);
     }
 
     /**
@@ -373,7 +338,7 @@ public class RetryManager {
      * Retry forever using last timeout time.
      */
     public void retryForeverUsingLastTimeout() {
-        mRetryCount = mCurMaxRetryCount;
+        mRetryCount = mMaxRetryCount;
         mRetryForever = true;
         if (DBG) log("retryForeverUsingLastTimeout: " + mRetryForever + ", " + mRetryCount);
     }
@@ -400,7 +365,7 @@ public class RetryManager {
             value = Integer.parseInt(stringValue);
             retVal = new Pair<Boolean, Integer>(validateNonNegativeInt(name, value), value);
         } catch (NumberFormatException e) {
-            Rlog.e(LOG_TAG, name + " bad value: " + stringValue, e);
+            Log.e(LOG_TAG, name + " bad value: " + stringValue, e);
             retVal = new Pair<Boolean, Integer>(false, 0);
         }
         if (VDBG) log("parseNonNetativeInt: " + name + ", " + stringValue + ", "
@@ -418,7 +383,7 @@ public class RetryManager {
     private boolean validateNonNegativeInt(String name, int value) {
         boolean retVal;
         if (value < 0) {
-            Rlog.e(LOG_TAG, name + " bad value: is < 0");
+            Log.e(LOG_TAG, name + " bad value: is < 0");
             retVal = false;
         } else {
             retVal = true;
@@ -435,11 +400,11 @@ public class RetryManager {
         if (randomTime == 0) {
             return 0;
         } else {
-            return mRng.nextInt(randomTime);
+            return rng.nextInt(randomTime);
         }
     }
 
     private void log(String s) {
-        Rlog.d(LOG_TAG, "[RM] " + s);
+        Log.d(LOG_TAG, "[RM] " + s);
     }
 }

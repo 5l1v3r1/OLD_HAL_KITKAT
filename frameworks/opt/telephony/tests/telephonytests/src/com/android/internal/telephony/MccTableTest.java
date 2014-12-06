@@ -21,7 +21,7 @@ import com.android.internal.telephony.MccTable;
 import android.test.AndroidTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
 
-import android.telephony.Rlog;
+import android.util.Log;
 
 public class MccTableTest extends AndroidTestCase {
     private final static String LOG_TAG = "GSM";

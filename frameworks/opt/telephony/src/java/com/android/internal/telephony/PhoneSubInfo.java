@@ -22,15 +22,12 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.telephony.PhoneNumberUtils;
-import android.telephony.Rlog;
+import android.util.Log;
 
-import com.android.internal.telephony.uicc.IsimRecords;
+import com.android.internal.telephony.ims.IsimRecords;
 
 public class PhoneSubInfo extends IPhoneSubInfo.Stub {
-    static final String LOG_TAG = "PhoneSubInfo";
-    private static final boolean DBG = true;
-    private static final boolean VDBG = false; // STOPSHIP if true
-
+    static final String LOG_TAG = "PHONE";
     private Phone mPhone;
     private Context mContext;
     private static final String READ_PHONE_STATE =
@@ -49,20 +46,18 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
     public void dispose() {
     }
 
-    @Override
     protected void finalize() {
         try {
             super.finalize();
         } catch (Throwable throwable) {
-            loge("Error while finalizing:", throwable);
+            Log.e(LOG_TAG, "Error while finalizing:", throwable);
         }
-        if (DBG) log("PhoneSubInfo finalized");
+        Log.d(LOG_TAG, "PhoneSubInfo finalized");
     }
 
     /**
      * Retrieves the unique device ID, e.g., IMEI for GSM phones and MEID for CDMA phones.
      */
-    @Override
     public String getDeviceId() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
         return mPhone.getDeviceId();
@@ -72,7 +67,6 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
      * Retrieves the software version number for the device, e.g., IMEI/SV
      * for GSM phones.
      */
-    @Override
     public String getDeviceSvn() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
         return mPhone.getDeviceSvn();
@@ -81,24 +75,14 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
     /**
      * Retrieves the unique subscriber ID, e.g., IMSI for GSM phones.
      */
-    @Override
     public String getSubscriberId() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
         return mPhone.getSubscriberId();
     }
 
     /**
-     * Retrieves the Group Identifier Level1 for GSM phones.
-     */
-    public String getGroupIdLevel1() {
-        mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
-        return mPhone.getGroupIdLevel1();
-    }
-
-    /**
      * Retrieves the serial number of the ICC, if applicable.
      */
-    @Override
     public String getIccSerialNumber() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
         return mPhone.getIccSerialNumber();
@@ -107,7 +91,6 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
     /**
      * Retrieves the phone number string for line 1.
      */
-    @Override
     public String getLine1Number() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
         return mPhone.getLine1Number();
@@ -116,16 +99,14 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
     /**
      * Retrieves the alpha identifier for line 1.
      */
-    @Override
     public String getLine1AlphaTag() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
-        return mPhone.getLine1AlphaTag();
+        return (String) mPhone.getLine1AlphaTag();
     }
 
     /**
      * Retrieves the MSISDN string.
      */
-    @Override
     public String getMsisdn() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
         return mPhone.getMsisdn();
@@ -134,11 +115,10 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
     /**
      * Retrieves the voice mail number.
      */
-    @Override
     public String getVoiceMailNumber() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
         String number = PhoneNumberUtils.extractNetworkPortion(mPhone.getVoiceMailNumber());
-        if (VDBG) log("VM: PhoneSubInfo.getVoiceMailNUmber: " + number);
+        Log.d(LOG_TAG, "VM: PhoneSubInfo.getVoiceMailNUmber: "); // + number);
         return number;
     }
 
@@ -147,29 +127,26 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
      *
      * @hide
      */
-    @Override
     public String getCompleteVoiceMailNumber() {
         mContext.enforceCallingOrSelfPermission(CALL_PRIVILEGED,
                 "Requires CALL_PRIVILEGED");
         String number = mPhone.getVoiceMailNumber();
-        if (VDBG) log("VM: PhoneSubInfo.getCompleteVoiceMailNUmber: " + number);
+        Log.d(LOG_TAG, "VM: PhoneSubInfo.getCompleteVoiceMailNUmber: "); // + number);
         return number;
     }
 
     /**
      * Retrieves the alpha identifier associated with the voice mail number.
      */
-    @Override
     public String getVoiceMailAlphaTag() {
         mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, "Requires READ_PHONE_STATE");
-        return mPhone.getVoiceMailAlphaTag();
+        return (String) mPhone.getVoiceMailAlphaTag();
     }
 
     /**
      * Returns the IMS private user identity (IMPI) that was loaded from the ISIM.
      * @return the IMPI, or null if not present or not loaded
      */
-    @Override
     public String getIsimImpi() {
         mContext.enforceCallingOrSelfPermission(READ_PRIVILEGED_PHONE_STATE,
                 "Requires READ_PRIVILEGED_PHONE_STATE");
@@ -185,7 +162,6 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
      * Returns the IMS home network domain name that was loaded from the ISIM.
      * @return the IMS domain name, or null if not present or not loaded
      */
-    @Override
     public String getIsimDomain() {
         mContext.enforceCallingOrSelfPermission(READ_PRIVILEGED_PHONE_STATE,
                 "Requires READ_PRIVILEGED_PHONE_STATE");
@@ -202,7 +178,6 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
      * @return an array of IMPU strings, with one IMPU per string, or null if
      *      not present or not loaded
      */
-    @Override
     public String[] getIsimImpu() {
         mContext.enforceCallingOrSelfPermission(READ_PRIVILEGED_PHONE_STATE,
                 "Requires READ_PRIVILEGED_PHONE_STATE");
@@ -214,15 +189,6 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
         }
     }
 
-    private void log(String s) {
-        Rlog.d(LOG_TAG, s);
-    }
-
-    private void loge(String s, Throwable e) {
-        Rlog.e(LOG_TAG, s, e);
-    }
-
-    @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -236,4 +202,5 @@ public class PhoneSubInfo extends IPhoneSubInfo.Stub {
         pw.println("  Phone Type = " + mPhone.getPhoneName());
         pw.println("  Device ID = " + mPhone.getDeviceId());
     }
+
 }

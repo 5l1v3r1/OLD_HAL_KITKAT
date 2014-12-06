@@ -27,7 +27,7 @@ import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
 import android.telephony.gsm.GsmCellLocation;
 import android.util.EventLog;
-import android.telephony.Rlog;
+import android.util.Log;
 
 import com.android.internal.telephony.CallStateException;
 import com.android.internal.telephony.CallTracker;
@@ -53,7 +53,7 @@ import java.util.ArrayList;
  * {@hide}
  */
 public final class GsmCallTracker extends CallTracker {
-    static final String LOG_TAG = "GsmCallTracker";
+    static final String LOG_TAG = "GSM";
     private static final boolean REPEAT_POLLING = false;
 
     private static final boolean DBG_POLL = false;
@@ -64,28 +64,28 @@ public final class GsmCallTracker extends CallTracker {
     static final int MAX_CONNECTIONS_PER_CALL = 5; // only 5 connections allowed per call
 
     //***** Instance Variables
-    GsmConnection mConnections[] = new GsmConnection[MAX_CONNECTIONS];
-    RegistrantList mVoiceCallEndedRegistrants = new RegistrantList();
-    RegistrantList mVoiceCallStartedRegistrants = new RegistrantList();
+    GsmConnection connections[] = new GsmConnection[MAX_CONNECTIONS];
+    RegistrantList voiceCallEndedRegistrants = new RegistrantList();
+    RegistrantList voiceCallStartedRegistrants = new RegistrantList();
 
 
     // connections dropped during last poll
-    ArrayList<GsmConnection> mDroppedDuringPoll
+    ArrayList<GsmConnection> droppedDuringPoll
         = new ArrayList<GsmConnection>(MAX_CONNECTIONS);
 
-    GsmCall mRingingCall = new GsmCall(this);
+    GsmCall ringingCall = new GsmCall(this);
             // A call that is ringing or (call) waiting
-    GsmCall mForegroundCall = new GsmCall(this);
-    GsmCall mBackgroundCall = new GsmCall(this);
+    GsmCall foregroundCall = new GsmCall(this);
+    GsmCall backgroundCall = new GsmCall(this);
 
-    GsmConnection mPendingMO;
-    boolean mHangupPendingMO;
+    GsmConnection pendingMO;
+    boolean hangupPendingMO;
 
-    GSMPhone mPhone;
+    GSMPhone phone;
 
-    boolean mDesiredMute = false;    // false = mute off
+    boolean desiredMute = false;    // false = mute off
 
-    PhoneConstants.State mState = PhoneConstants.State.IDLE;
+    PhoneConstants.State state = PhoneConstants.State.IDLE;
 
 
 
@@ -95,76 +95,61 @@ public final class GsmCallTracker extends CallTracker {
     //***** Constructors
 
     GsmCallTracker (GSMPhone phone) {
-        this.mPhone = phone;
-        mCi = phone.mCi;
+        this.phone = phone;
+        cm = phone.mCM;
 
-        mCi.registerForCallStateChanged(this, EVENT_CALL_STATE_CHANGE, null);
+        cm.registerForCallStateChanged(this, EVENT_CALL_STATE_CHANGE, null);
 
-        mCi.registerForOn(this, EVENT_RADIO_AVAILABLE, null);
-        mCi.registerForNotAvailable(this, EVENT_RADIO_NOT_AVAILABLE, null);
+        cm.registerForOn(this, EVENT_RADIO_AVAILABLE, null);
+        cm.registerForNotAvailable(this, EVENT_RADIO_NOT_AVAILABLE, null);
     }
 
     public void dispose() {
         //Unregister for all events
-        mCi.unregisterForCallStateChanged(this);
-        mCi.unregisterForOn(this);
-        mCi.unregisterForNotAvailable(this);
+        cm.unregisterForCallStateChanged(this);
+        cm.unregisterForOn(this);
+        cm.unregisterForNotAvailable(this);
 
-        for(GsmConnection c : mConnections) {
+        for(GsmConnection c : connections) {
             try {
-                if(c != null) {
-                    hangup(c);
-                    // Since by now we are unregistered, we won't notify
-                    // PhoneApp that the call is gone. Do that here
-                    Rlog.d(LOG_TAG, "dispose: call connnection onDisconnect, cause LOST_SIGNAL");
-                    c.onDisconnect(Connection.DisconnectCause.LOST_SIGNAL);
-                }
+                if(c != null) hangup(c);
             } catch (CallStateException ex) {
-                Rlog.e(LOG_TAG, "dispose: unexpected error on hangup", ex);
+                Log.e(LOG_TAG, "unexpected error on hangup during dispose");
             }
         }
 
         try {
-            if(mPendingMO != null) {
-                hangup(mPendingMO);
-                Rlog.d(LOG_TAG, "dispose: call mPendingMO.onDsiconnect, cause LOST_SIGNAL");
-                mPendingMO.onDisconnect(Connection.DisconnectCause.LOST_SIGNAL);
-            }
+            if(pendingMO != null) hangup(pendingMO);
         } catch (CallStateException ex) {
-            Rlog.e(LOG_TAG, "dispose: unexpected error on hangup", ex);
+            Log.e(LOG_TAG, "unexpected error on hangup during dispose");
         }
 
         clearDisconnected();
     }
 
-    @Override
     protected void finalize() {
-        Rlog.d(LOG_TAG, "GsmCallTracker finalized");
+        Log.d(LOG_TAG, "GsmCallTracker finalized");
     }
 
     //***** Instance Methods
 
     //***** Public Methods
-    @Override
     public void registerForVoiceCallStarted(Handler h, int what, Object obj) {
         Registrant r = new Registrant(h, what, obj);
-        mVoiceCallStartedRegistrants.add(r);
+        voiceCallStartedRegistrants.add(r);
     }
 
-    @Override
     public void unregisterForVoiceCallStarted(Handler h) {
-        mVoiceCallStartedRegistrants.remove(h);
+        voiceCallStartedRegistrants.remove(h);
     }
 
-    @Override
     public void registerForVoiceCallEnded(Handler h, int what, Object obj) {
         Registrant r = new Registrant(h, what, obj);
-        mVoiceCallEndedRegistrants.add(r);
+        voiceCallEndedRegistrants.add(r);
     }
 
-    @Override
     public void unregisterForVoiceCallEnded(Handler h) {
-        mVoiceCallEndedRegistrants.remove(h);
+        voiceCallEndedRegistrants.remove(h);
     }
 
     private void
@@ -173,7 +158,7 @@ public final class GsmCallTracker extends CallTracker {
 
         // We need to make a copy here, since fakeHoldBeforeDial()
         // modifies the lists, and we don't want to reverse the order
-        connCopy = (List<Connection>) mForegroundCall.mConnections.clone();
+        connCopy = (List<Connection>) foregroundCall.connections.clone();
 
         for (int i = 0, s = connCopy.size() ; i < s ; i++) {
             GsmConnection conn = (GsmConnection)connCopy.get(i);
@@ -197,7 +182,7 @@ public final class GsmCallTracker extends CallTracker {
         // The new call must be assigned to the foreground call.
         // That call must be idle, so place anything that's
         // there on hold
-        if (mForegroundCall.getState() == GsmCall.State.ACTIVE) {
+        if (foregroundCall.getState() == GsmCall.State.ACTIVE) {
             // this will probably be done by the radio anyway
             // but the dial might fail before this happens
             // and we need to make sure the foreground call is clear
@@ -211,20 +196,20 @@ public final class GsmCallTracker extends CallTracker {
             fakeHoldForegroundBeforeDial();
         }
 
-        if (mForegroundCall.getState() != GsmCall.State.IDLE) {
+        if (foregroundCall.getState() != GsmCall.State.IDLE) {
             //we should have failed in !canDial() above before we get here
             throw new CallStateException("cannot dial in current state");
         }
 
-        mPendingMO = new GsmConnection(mPhone.getContext(), checkForTestEmergencyNumber(dialString),
-                this, mForegroundCall);
-        mHangupPendingMO = false;
+        pendingMO = new GsmConnection(phone.getContext(), checkForTestEmergencyNumber(dialString),
+                this, foregroundCall);
+        hangupPendingMO = false;
 
-        if (mPendingMO.mAddress == null || mPendingMO.mAddress.length() == 0
-            || mPendingMO.mAddress.indexOf(PhoneNumberUtils.WILD) >= 0
+        if (pendingMO.address == null || pendingMO.address.length() == 0
+            || pendingMO.address.indexOf(PhoneNumberUtils.WILD) >= 0
         ) {
             // Phone number is invalid
-            mPendingMO.mCause = Connection.DisconnectCause.INVALID_NUMBER;
+            pendingMO.cause = Connection.DisconnectCause.INVALID_NUMBER;
 
             // handlePollCalls() will notice this call not present
             // and will mark it as dropped.
@@ -233,13 +218,13 @@ public final class GsmCallTracker extends CallTracker {
             // Always unmute when initiating a new call
             setMute(false);
 
-            mCi.dial(mPendingMO.mAddress, clirMode, uusInfo, obtainCompleteMessage());
+            cm.dial(pendingMO.address, clirMode, uusInfo, obtainCompleteMessage());
         }
 
         updatePhoneState();
-        mPhone.notifyPreciseCallStateChanged();
+        phone.notifyPreciseCallStateChanged();
 
-        return mPendingMO;
+        return pendingMO;
     }
 
     Connection
@@ -263,12 +248,12 @@ public final class GsmCallTracker extends CallTracker {
         // in case the active/holding call disappeared and this
         // is no longer call waiting
 
-        if (mRingingCall.getState() == GsmCall.State.INCOMING) {
-            Rlog.i("phone", "acceptCall: incoming...");
+        if (ringingCall.getState() == GsmCall.State.INCOMING) {
+            Log.i("phone", "acceptCall: incoming...");
             // Always unmute when answering a new call
             setMute(false);
-            mCi.acceptCall(obtainCompleteMessage());
-        } else if (mRingingCall.getState() == GsmCall.State.WAITING) {
+            cm.acceptCall(obtainCompleteMessage());
+        } else if (ringingCall.getState() == GsmCall.State.WAITING) {
             setMute(false);
             switchWaitingOrHoldingAndActive();
         } else {
@@ -280,8 +265,8 @@ public final class GsmCallTracker extends CallTracker {
     rejectCall () throws CallStateException {
         // AT+CHLD=0 means "release held or UDUB"
         // so if the phone isn't ringing, this could hang up held
-        if (mRingingCall.getState().isRinging()) {
-            mCi.rejectCall(obtainCompleteMessage());
+        if (ringingCall.getState().isRinging()) {
+            cm.rejectCall(obtainCompleteMessage());
         } else {
             throw new CallStateException("phone not ringing");
         }
@@ -290,22 +275,22 @@ public final class GsmCallTracker extends CallTracker {
     void
     switchWaitingOrHoldingAndActive() throws CallStateException {
         // Should we bother with this check?
-        if (mRingingCall.getState() == GsmCall.State.INCOMING) {
+        if (ringingCall.getState() == GsmCall.State.INCOMING) {
             throw new CallStateException("cannot be in the incoming state");
         } else {
-            mCi.switchWaitingOrHoldingAndActive(
+            cm.switchWaitingOrHoldingAndActive(
                     obtainCompleteMessage(EVENT_SWITCH_RESULT));
         }
     }
 
     void
-    conference() {
-        mCi.conference(obtainCompleteMessage(EVENT_CONFERENCE_RESULT));
+    conference() throws CallStateException {
+        cm.conference(obtainCompleteMessage(EVENT_CONFERENCE_RESULT));
     }
 
     void
-    explicitCallTransfer() {
-        mCi.explicitCallTransfer(obtainCompleteMessage(EVENT_ECT_RESULT));
+    explicitCallTransfer() throws CallStateException {
+        cm.explicitCallTransfer(obtainCompleteMessage(EVENT_ECT_RESULT));
     }
 
     void
@@ -313,49 +298,47 @@ public final class GsmCallTracker extends CallTracker {
         internalClearDisconnected();
 
         updatePhoneState();
-        mPhone.notifyPreciseCallStateChanged();
+        phone.notifyPreciseCallStateChanged();
     }
 
     boolean
     canConference() {
-        return mForegroundCall.getState() == GsmCall.State.ACTIVE
-                && mBackgroundCall.getState() == GsmCall.State.HOLDING
-                && !mBackgroundCall.isFull()
-                && !mForegroundCall.isFull();
+        return foregroundCall.getState() == GsmCall.State.ACTIVE
+                && backgroundCall.getState() == GsmCall.State.HOLDING
+                && !backgroundCall.isFull()
+                && !foregroundCall.isFull();
     }
 
     boolean
     canDial() {
         boolean ret;
-        int serviceState = mPhone.getServiceState().getState();
+        int serviceState = phone.getServiceState().getState();
         String disableCall = SystemProperties.get(
                 TelephonyProperties.PROPERTY_DISABLE_CALL, "false");
 
         ret = (serviceState != ServiceState.STATE_POWER_OFF)
-                && mPendingMO == null
-                && !mRingingCall.isRinging()
+                && pendingMO == null
+                && !ringingCall.isRinging()
                 && !disableCall.equals("true")
-                && (!mForegroundCall.getState().isAlive()
-                    || !mBackgroundCall.getState().isAlive());
+                && (!foregroundCall.getState().isAlive()
+                    || !backgroundCall.getState().isAlive());
 
         return ret;
     }
 
     boolean
     canTransfer() {
-        return (mForegroundCall.getState() == GsmCall.State.ACTIVE
-                || mForegroundCall.getState() == GsmCall.State.ALERTING
-                || mForegroundCall.getState() == GsmCall.State.DIALING)
-            && mBackgroundCall.getState() == GsmCall.State.HOLDING;
+        return foregroundCall.getState() == GsmCall.State.ACTIVE
+                && backgroundCall.getState() == GsmCall.State.HOLDING;
     }
 
     //***** Private Instance Methods
 
     private void
     internalClearDisconnected() {
-        mRingingCall.clearDisconnected();
-        mForegroundCall.clearDisconnected();
-        mBackgroundCall.clearDisconnected();
+        ringingCall.clearDisconnected();
+        foregroundCall.clearDisconnected();
+        backgroundCall.clearDisconnected();
     }
 
     /**
@@ -373,60 +356,59 @@ public final class GsmCallTracker extends CallTracker {
      */
     private Message
     obtainCompleteMessage(int what) {
-        mPendingOperations++;
-        mLastRelevantPoll = null;
-        mNeedsPoll = true;
+        pendingOperations++;
+        lastRelevantPoll = null;
+        needsPoll = true;
 
         if (DBG_POLL) log("obtainCompleteMessage: pendingOperations=" +
-                mPendingOperations + ", needsPoll=" + mNeedsPoll);
+                pendingOperations + ", needsPoll=" + needsPoll);
 
         return obtainMessage(what);
     }
 
     private void
     operationComplete() {
-        mPendingOperations--;
+        pendingOperations--;
 
         if (DBG_POLL) log("operationComplete: pendingOperations=" +
-                mPendingOperations + ", needsPoll=" + mNeedsPoll);
+                pendingOperations + ", needsPoll=" + needsPoll);
 
-        if (mPendingOperations == 0 && mNeedsPoll) {
-            mLastRelevantPoll = obtainMessage(EVENT_POLL_CALLS_RESULT);
-            mCi.getCurrentCalls(mLastRelevantPoll);
-        } else if (mPendingOperations < 0) {
+        if (pendingOperations == 0 && needsPoll) {
+            lastRelevantPoll = obtainMessage(EVENT_POLL_CALLS_RESULT);
+            cm.getCurrentCalls(lastRelevantPoll);
+        } else if (pendingOperations < 0) {
             // this should never happen
-            Rlog.e(LOG_TAG,"GsmCallTracker.pendingOperations < 0");
-            mPendingOperations = 0;
+            Log.e(LOG_TAG,"GsmCallTracker.pendingOperations < 0");
+            pendingOperations = 0;
         }
     }
 
     private void
     updatePhoneState() {
-        PhoneConstants.State oldState = mState;
+        PhoneConstants.State oldState = state;
 
-        if (mRingingCall.isRinging()) {
-            mState = PhoneConstants.State.RINGING;
-        } else if (mPendingMO != null ||
-                !(mForegroundCall.isIdle() && mBackgroundCall.isIdle())) {
-            mState = PhoneConstants.State.OFFHOOK;
+        if (ringingCall.isRinging()) {
+            state = PhoneConstants.State.RINGING;
+        } else if (pendingMO != null ||
+                !(foregroundCall.isIdle() && backgroundCall.isIdle())) {
+            state = PhoneConstants.State.OFFHOOK;
         } else {
-            mState = PhoneConstants.State.IDLE;
+            state = PhoneConstants.State.IDLE;
         }
 
-        if (mState == PhoneConstants.State.IDLE && oldState != mState) {
-            mVoiceCallEndedRegistrants.notifyRegistrants(
+        if (state == PhoneConstants.State.IDLE && oldState != state) {
+            voiceCallEndedRegistrants.notifyRegistrants(
                 new AsyncResult(null, null, null));
-        } else if (oldState == PhoneConstants.State.IDLE && oldState != mState) {
-            mVoiceCallStartedRegistrants.notifyRegistrants (
+        } else if (oldState == PhoneConstants.State.IDLE && oldState != state) {
+            voiceCallStartedRegistrants.notifyRegistrants (
                     new AsyncResult(null, null, null));
         }
 
-        if (mState != oldState) {
-            mPhone.notifyPhoneStateChanged();
+        if (state != oldState) {
+            phone.notifyPhoneStateChanged();
         }
     }
 
-    @Override
     protected synchronized void
     handlePollCalls(AsyncResult ar) {
         List polledCalls;
@@ -447,13 +429,12 @@ public final class GsmCallTracker extends CallTracker {
         Connection newRinging = null; //or waiting
         boolean hasNonHangupStateChanged = false;   // Any change besides
                                                     // a dropped connection
-        boolean hasAnyCallDisconnected = false;
         boolean needsPollDelay = false;
         boolean unknownConnectionAppeared = false;
 
         for (int i = 0, curDC = 0, dcSize = polledCalls.size()
-                ; i < mConnections.length; i++) {
-            GsmConnection conn = mConnections[i];
+                ; i < connections.length; i++) {
+            GsmConnection conn = connections[i];
             DriverCall dc = null;
 
             // polledCall list is sparse
@@ -472,25 +453,25 @@ public final class GsmCallTracker extends CallTracker {
 
             if (conn == null && dc != null) {
                 // Connection appeared in CLCC response that we don't know about
-                if (mPendingMO != null && mPendingMO.compareTo(dc)) {
+                if (pendingMO != null && pendingMO.compareTo(dc)) {
 
-                    if (DBG_POLL) log("poll: pendingMO=" + mPendingMO);
+                    if (DBG_POLL) log("poll: pendingMO=" + pendingMO);
 
                     // It's our pending mobile originating call
-                    mConnections[i] = mPendingMO;
-                    mPendingMO.mIndex = i;
-                    mPendingMO.update(dc);
-                    mPendingMO = null;
+                    connections[i] = pendingMO;
+                    pendingMO.index = i;
+                    pendingMO.update(dc);
+                    pendingMO = null;
 
                     // Someone has already asked to hangup this call
-                    if (mHangupPendingMO) {
-                        mHangupPendingMO = false;
+                    if (hangupPendingMO) {
+                        hangupPendingMO = false;
                         try {
                             if (Phone.DEBUG_PHONE) log(
                                     "poll: hangupPendingMO, hangup conn " + i);
-                            hangup(mConnections[i]);
+                            hangup(connections[i]);
                         } catch (CallStateException ex) {
-                            Rlog.e(LOG_TAG, "unexpected error on hangup");
+                            Log.e(LOG_TAG, "unexpected error on hangup");
                         }
 
                         // Do not continue processing this poll
@@ -498,29 +479,25 @@ public final class GsmCallTracker extends CallTracker {
                         return;
                     }
                 } else {
-                    mConnections[i] = new GsmConnection(mPhone.getContext(), dc, this, i);
+                    connections[i] = new GsmConnection(phone.getContext(), dc, this, i);
 
                     // it's a ringing call
-                    if (mConnections[i].getCall() == mRingingCall) {
-                        newRinging = mConnections[i];
+                    if (connections[i].getCall() == ringingCall) {
+                        newRinging = connections[i];
                     } else {
                         // Something strange happened: a call appeared
                         // which is neither a ringing call or one we created.
                         // Either we've crashed and re-attached to an existing
                         // call, or something else (eg, SIM) initiated the call.
 
-                        Rlog.i(LOG_TAG,"Phantom call appeared " + dc);
+                        Log.i(LOG_TAG,"Phantom call appeared " + dc);
 
                         // If it's a connected call, set the connect time so that
                         // it's non-zero.  It may not be accurate, but at least
                         // it won't appear as a Missed Call.
                         if (dc.state != DriverCall.State.ALERTING
                                 && dc.state != DriverCall.State.DIALING) {
-                            mConnections[i].onConnectedInOrOut();
-                            if (dc.state == DriverCall.State.HOLDING) {
-                                // We've transitioned into HOLDING
-                                mConnections[i].onStartedHolding();
-                            }
+                            connections[i].connectTime = System.currentTimeMillis();
                         }
 
                         unknownConnectionAppeared = true;
@@ -530,19 +507,19 @@ public final class GsmCallTracker extends CallTracker {
             } else if (conn != null && dc == null) {
                 // Connection missing in CLCC response that we were
                 // tracking.
-                mDroppedDuringPoll.add(conn);
+                droppedDuringPoll.add(conn);
                 // Dropped connections are removed from the CallTracker
                 // list but kept in the GsmCall list
-                mConnections[i] = null;
+                connections[i] = null;
             } else if (conn != null && dc != null && !conn.compareTo(dc)) {
                 // Connection in CLCC response does not match what
                 // we were tracking. Assume dropped call and new call
 
-                mDroppedDuringPoll.add(conn);
-                mConnections[i] = new GsmConnection (mPhone.getContext(), dc, this, i);
+                droppedDuringPoll.add(conn);
+                connections[i] = new GsmConnection (phone.getContext(), dc, this, i);
 
-                if (mConnections[i].getCall() == mRingingCall) {
-                    newRinging = mConnections[i];
+                if (connections[i].getCall() == ringingCall) {
+                    newRinging = connections[i];
                 } // else something strange happened
                 hasNonHangupStateChanged = true;
             } else if (conn != null && dc != null) { /* implicit conn.compareTo(dc) */
@@ -574,50 +551,54 @@ public final class GsmCallTracker extends CallTracker {
         // This is the first poll after an ATD.
         // We expect the pending call to appear in the list
         // If it does not, we land here
-        if (mPendingMO != null) {
-            Rlog.d(LOG_TAG,"Pending MO dropped before poll fg state:"
-                            + mForegroundCall.getState());
+        if (pendingMO != null) {
+            Log.d(LOG_TAG,"Pending MO dropped before poll fg state:"
+                            + foregroundCall.getState());
 
-            mDroppedDuringPoll.add(mPendingMO);
-            mPendingMO = null;
-            mHangupPendingMO = false;
+            droppedDuringPoll.add(pendingMO);
+            pendingMO = null;
+            hangupPendingMO = false;
         }
 
         if (newRinging != null) {
-            mPhone.notifyNewRingingConnection(newRinging);
+            phone.notifyNewRingingConnection(newRinging);
         }
 
         // clear the "local hangup" and "missed/rejected call"
         // cases from the "dropped during poll" list
         // These cases need no "last call fail" reason
-        for (int i = mDroppedDuringPoll.size() - 1; i >= 0 ; i--) {
-            GsmConnection conn = mDroppedDuringPoll.get(i);
+        for (int i = droppedDuringPoll.size() - 1; i >= 0 ; i--) {
+            GsmConnection conn = droppedDuringPoll.get(i);
 
             if (conn.isIncoming() && conn.getConnectTime() == 0) {
                 // Missed or rejected call
                 Connection.DisconnectCause cause;
-                if (conn.mCause == Connection.DisconnectCause.LOCAL) {
+                if (conn.cause == Connection.DisconnectCause.LOCAL) {
                     cause = Connection.DisconnectCause.INCOMING_REJECTED;
                 } else {
                     cause = Connection.DisconnectCause.INCOMING_MISSED;
                 }
 
                 if (Phone.DEBUG_PHONE) {
-                    log("missed/rejected call, conn.cause=" + conn.mCause);
+                    log("missed/rejected call, conn.cause=" + conn.cause);
                     log("setting cause to " + cause);
                 }
-                mDroppedDuringPoll.remove(i);
-                hasAnyCallDisconnected |= conn.onDisconnect(cause);
-            } else if (conn.mCause == Connection.DisconnectCause.LOCAL
-                    || conn.mCause == Connection.DisconnectCause.INVALID_NUMBER) {
-                mDroppedDuringPoll.remove(i);
-                hasAnyCallDisconnected |= conn.onDisconnect(conn.mCause);
+                droppedDuringPoll.remove(i);
+                conn.onDisconnect(cause);
+            } else if (conn.cause == Connection.DisconnectCause.LOCAL) {
+                // Local hangup
+                droppedDuringPoll.remove(i);
+                conn.onDisconnect(Connection.DisconnectCause.LOCAL);
+            } else if (conn.cause ==
+                Connection.DisconnectCause.INVALID_NUMBER) {
+                droppedDuringPoll.remove(i);
+                conn.onDisconnect(Connection.DisconnectCause.INVALID_NUMBER);
             }
         }
 
         // Any non-local disconnects: determine cause
-        if (mDroppedDuringPoll.size() > 0) {
-            mCi.getLastCallFailCause(
+        if (droppedDuringPoll.size() > 0) {
+            cm.getLastCallFailCause(
                 obtainNoPollCompleteMessage(EVENT_GET_LAST_CALL_FAIL_CAUSE));
         }
 
@@ -630,18 +611,18 @@ public final class GsmCallTracker extends CallTracker {
         // 1) the phone has started to ring
         // 2) A Call/Connection object has changed state...
         //    we may have switched or held or answered (but not hung up)
-        if (newRinging != null || hasNonHangupStateChanged || hasAnyCallDisconnected) {
+        if (newRinging != null || hasNonHangupStateChanged) {
             internalClearDisconnected();
         }
 
         updatePhoneState();
 
         if (unknownConnectionAppeared) {
-            mPhone.notifyUnknownConnection();
+            phone.notifyUnknownConnection();
         }
 
-        if (hasNonHangupStateChanged || newRinging != null || hasAnyCallDisconnected) {
-            mPhone.notifyPreciseCallStateChanged();
+        if (hasNonHangupStateChanged || newRinging != null) {
+            phone.notifyPreciseCallStateChanged();
         }
 
         //dumpState();
@@ -659,27 +640,27 @@ public final class GsmCallTracker extends CallTracker {
     dumpState() {
         List l;
 
-        Rlog.i(LOG_TAG,"Phone State:" + mState);
+        Log.i(LOG_TAG,"Phone State:" + state);
 
-        Rlog.i(LOG_TAG,"Ringing call: " + mRingingCall.toString());
+        Log.i(LOG_TAG,"Ringing call: " + ringingCall.toString());
 
-        l = mRingingCall.getConnections();
+        l = ringingCall.getConnections();
         for (int i = 0, s = l.size(); i < s; i++) {
-            Rlog.i(LOG_TAG,l.get(i).toString());
+            Log.i(LOG_TAG,l.get(i).toString());
         }
 
-        Rlog.i(LOG_TAG,"Foreground call: " + mForegroundCall.toString());
+        Log.i(LOG_TAG,"Foreground call: " + foregroundCall.toString());
 
-        l = mForegroundCall.getConnections();
+        l = foregroundCall.getConnections();
         for (int i = 0, s = l.size(); i < s; i++) {
-            Rlog.i(LOG_TAG,l.get(i).toString());
+            Log.i(LOG_TAG,l.get(i).toString());
         }
 
-        Rlog.i(LOG_TAG,"Background call: " + mBackgroundCall.toString());
+        Log.i(LOG_TAG,"Background call: " + backgroundCall.toString());
 
-        l = mBackgroundCall.getConnections();
+        l = backgroundCall.getConnections();
         for (int i = 0, s = l.size(); i < s; i++) {
-            Rlog.i(LOG_TAG,l.get(i).toString());
+            Log.i(LOG_TAG,l.get(i).toString());
         }
 
     }
@@ -688,24 +669,24 @@ public final class GsmCallTracker extends CallTracker {
 
     /*package*/ void
     hangup (GsmConnection conn) throws CallStateException {
-        if (conn.mOwner != this) {
+        if (conn.owner != this) {
             throw new CallStateException ("GsmConnection " + conn
                                     + "does not belong to GsmCallTracker " + this);
         }
 
-        if (conn == mPendingMO) {
+        if (conn == pendingMO) {
             // We're hanging up an outgoing call that doesn't have it's
             // GSM index assigned yet
 
             if (Phone.DEBUG_PHONE) log("hangup: set hangupPendingMO to true");
-            mHangupPendingMO = true;
+            hangupPendingMO = true;
         } else {
             try {
-                mCi.hangupConnection (conn.getGSMIndex(), obtainCompleteMessage());
+                cm.hangupConnection (conn.getGSMIndex(), obtainCompleteMessage());
             } catch (CallStateException ex) {
                 // Ignore "connection not found"
                 // Call may have hung up already
-                Rlog.w(LOG_TAG,"GsmCallTracker WARN: hangup() on absent connection "
+                Log.w(LOG_TAG,"GsmCallTracker WARN: hangup() on absent connection "
                                 + conn);
             }
         }
@@ -715,17 +696,17 @@ public final class GsmCallTracker extends CallTracker {
 
     /*package*/ void
     separate (GsmConnection conn) throws CallStateException {
-        if (conn.mOwner != this) {
+        if (conn.owner != this) {
             throw new CallStateException ("GsmConnection " + conn
                                     + "does not belong to GsmCallTracker " + this);
         }
         try {
-            mCi.separateConnection (conn.getGSMIndex(),
+            cm.separateConnection (conn.getGSMIndex(),
                 obtainCompleteMessage(EVENT_SEPARATE_RESULT));
         } catch (CallStateException ex) {
             // Ignore "connection not found"
             // Call may have hung up already
-            Rlog.w(LOG_TAG,"GsmCallTracker WARN: separate() on absent connection "
+            Log.w(LOG_TAG,"GsmCallTracker WARN: separate() on absent connection "
                           + conn);
         }
     }
@@ -734,13 +715,13 @@ public final class GsmCallTracker extends CallTracker {
 
     /*package*/ void
     setMute(boolean mute) {
-        mDesiredMute = mute;
-        mCi.setMute(mDesiredMute, null);
+        desiredMute = mute;
+        cm.setMute(desiredMute, null);
     }
 
     /*package*/ boolean
     getMute() {
-        return mDesiredMute;
+        return desiredMute;
     }
 
 
@@ -752,10 +733,10 @@ public final class GsmCallTracker extends CallTracker {
             throw new CallStateException("no connections in call");
         }
 
-        if (call == mRingingCall) {
+        if (call == ringingCall) {
             if (Phone.DEBUG_PHONE) log("(ringing) hangup waiting or background");
-            mCi.hangupWaitingOrBackground(obtainCompleteMessage());
-        } else if (call == mForegroundCall) {
+            cm.hangupWaitingOrBackground(obtainCompleteMessage());
+        } else if (call == foregroundCall) {
             if (call.isDialingOrAlerting()) {
                 if (Phone.DEBUG_PHONE) {
                     log("(foregnd) hangup dialing or alerting...");
@@ -764,8 +745,8 @@ public final class GsmCallTracker extends CallTracker {
             } else {
                 hangupForegroundResumeBackground();
             }
-        } else if (call == mBackgroundCall) {
-            if (mRingingCall.isRinging()) {
+        } else if (call == backgroundCall) {
+            if (ringingCall.isRinging()) {
                 if (Phone.DEBUG_PHONE) {
                     log("hangup all conns in background call");
                 }
@@ -779,28 +760,28 @@ public final class GsmCallTracker extends CallTracker {
         }
 
         call.onHangupLocal();
-        mPhone.notifyPreciseCallStateChanged();
+        phone.notifyPreciseCallStateChanged();
     }
 
     /* package */
     void hangupWaitingOrBackground() {
         if (Phone.DEBUG_PHONE) log("hangupWaitingOrBackground");
-        mCi.hangupWaitingOrBackground(obtainCompleteMessage());
+        cm.hangupWaitingOrBackground(obtainCompleteMessage());
     }
 
     /* package */
     void hangupForegroundResumeBackground() {
         if (Phone.DEBUG_PHONE) log("hangupForegroundResumeBackground");
-        mCi.hangupForegroundResumeBackground(obtainCompleteMessage());
+        cm.hangupForegroundResumeBackground(obtainCompleteMessage());
     }
 
     void hangupConnectionByIndex(GsmCall call, int index)
             throws CallStateException {
-        int count = call.mConnections.size();
+        int count = call.connections.size();
         for (int i = 0; i < count; i++) {
-            GsmConnection cn = (GsmConnection)call.mConnections.get(i);
+            GsmConnection cn = (GsmConnection)call.connections.get(i);
             if (cn.getGSMIndex() == index) {
-                mCi.hangupConnection(index, obtainCompleteMessage());
+                cm.hangupConnection(index, obtainCompleteMessage());
                 return;
             }
         }
@@ -808,24 +789,24 @@ public final class GsmCallTracker extends CallTracker {
         throw new CallStateException("no gsm index found");
     }
 
-    void hangupAllConnections(GsmCall call) {
+    void hangupAllConnections(GsmCall call) throws CallStateException{
         try {
-            int count = call.mConnections.size();
+            int count = call.connections.size();
             for (int i = 0; i < count; i++) {
-                GsmConnection cn = (GsmConnection)call.mConnections.get(i);
-                mCi.hangupConnection(cn.getGSMIndex(), obtainCompleteMessage());
+                GsmConnection cn = (GsmConnection)call.connections.get(i);
+                cm.hangupConnection(cn.getGSMIndex(), obtainCompleteMessage());
             }
         } catch (CallStateException ex) {
-            Rlog.e(LOG_TAG, "hangupConnectionByIndex caught " + ex);
+            Log.e(LOG_TAG, "hangupConnectionByIndex caught " + ex);
         }
     }
 
     /* package */
     GsmConnection getConnectionByIndex(GsmCall call, int index)
             throws CallStateException {
-        int count = call.mConnections.size();
+        int count = call.connections.size();
         for (int i = 0; i < count; i++) {
-            GsmConnection cn = (GsmConnection)call.mConnections.get(i);
+            GsmConnection cn = (GsmConnection)call.connections.get(i);
             if (cn.getGSMIndex() == index) {
                 return cn;
             }
@@ -850,25 +831,19 @@ public final class GsmCallTracker extends CallTracker {
 
     //****** Overridden from Handler
 
-    @Override
     public void
     handleMessage (Message msg) {
         AsyncResult ar;
 
-        if (!mPhone.mIsTheCurrentActivePhone) {
-            Rlog.e(LOG_TAG, "Received message " + msg +
-                    "[" + msg.what + "] while being destroyed. Ignoring.");
-            return;
-        }
         switch (msg.what) {
             case EVENT_POLL_CALLS_RESULT:
                 ar = (AsyncResult)msg.obj;
 
-                if (msg == mLastRelevantPoll) {
+                if (msg == lastRelevantPoll) {
                     if (DBG_POLL) log(
                             "handle EVENT_POLL_CALL_RESULT: set needsPoll=F");
-                    mNeedsPoll = false;
-                    mLastRelevantPoll = null;
+                    needsPoll = false;
+                    lastRelevantPoll = null;
                     handlePollCalls((AsyncResult)msg.obj);
                 }
             break;
@@ -884,7 +859,7 @@ public final class GsmCallTracker extends CallTracker {
             case EVENT_ECT_RESULT:
                 ar = (AsyncResult)msg.obj;
                 if (ar.exception != null) {
-                    mPhone.notifySuppServiceFailed(getFailedService(msg.what));
+                    phone.notifySuppServiceFailed(getFailedService(msg.what));
                 }
                 operationComplete();
             break;
@@ -899,7 +874,7 @@ public final class GsmCallTracker extends CallTracker {
                     // An exception occurred...just treat the disconnect
                     // cause as "normal"
                     causeCode = CallFailCause.NORMAL_CLEARING;
-                    Rlog.i(LOG_TAG,
+                    Log.i(LOG_TAG,
                             "Exception during getLastCallFailCause, assuming normal disconnect");
                 } else {
                     causeCode = ((int[])ar.result)[0];
@@ -912,24 +887,24 @@ public final class GsmCallTracker extends CallTracker {
                     causeCode == CallFailCause.QOS_NOT_AVAIL ||
                     causeCode == CallFailCause.BEARER_NOT_AVAIL ||
                     causeCode == CallFailCause.ERROR_UNSPECIFIED) {
-                    GsmCellLocation loc = ((GsmCellLocation)mPhone.getCellLocation());
+                    GsmCellLocation loc = ((GsmCellLocation)phone.getCellLocation());
                     EventLog.writeEvent(EventLogTags.CALL_DROP,
                             causeCode, loc != null ? loc.getCid() : -1,
                             TelephonyManager.getDefault().getNetworkType());
                 }
 
-                for (int i = 0, s =  mDroppedDuringPoll.size()
+                for (int i = 0, s =  droppedDuringPoll.size()
                         ; i < s ; i++
                 ) {
-                    GsmConnection conn = mDroppedDuringPoll.get(i);
+                    GsmConnection conn = droppedDuringPoll.get(i);
 
                     conn.onRemoteDisconnect(causeCode);
                 }
 
                 updatePhoneState();
 
-                mPhone.notifyPreciseCallStateChanged();
-                mDroppedDuringPoll.clear();
+                phone.notifyPreciseCallStateChanged();
+                droppedDuringPoll.clear();
             break;
 
             case EVENT_REPOLL_AFTER_DELAY:
@@ -947,32 +922,31 @@ public final class GsmCallTracker extends CallTracker {
         }
     }
 
-    @Override
     protected void log(String msg) {
-        Rlog.d(LOG_TAG, "[GsmCallTracker] " + msg);
+        Log.d(LOG_TAG, "[GsmCallTracker] " + msg);
     }
 
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("GsmCallTracker extends:");
         super.dump(fd, pw, args);
-        pw.println("mConnections: length=" + mConnections.length);
-        for(int i=0; i < mConnections.length; i++) {
-            pw.printf("  mConnections[%d]=%s\n", i, mConnections[i]);
+        pw.println("connections: length=" + connections.length);
+        for(int i=0; i < connections.length; i++) {
+            pw.printf("  connections[%d]=%s\n", i, connections[i]);
         }
-        pw.println(" mVoiceCallEndedRegistrants=" + mVoiceCallEndedRegistrants);
-        pw.println(" mVoiceCallStartedRegistrants=" + mVoiceCallStartedRegistrants);
-        pw.println(" mDroppedDuringPoll: size=" + mDroppedDuringPoll.size());
-        for(int i = 0; i < mDroppedDuringPoll.size(); i++) {
-            pw.printf( "  mDroppedDuringPoll[%d]=%s\n", i, mDroppedDuringPoll.get(i));
+        pw.println(" voiceCallEndedRegistrants=" + voiceCallEndedRegistrants);
+        pw.println(" voiceCallStartedRegistrants=" + voiceCallStartedRegistrants);
+        pw.println(" droppedDuringPoll: size=" + droppedDuringPoll.size());
+        for(int i = 0; i < droppedDuringPoll.size(); i++) {
+            pw.printf( "  droppedDuringPoll[%d]=%s\n", i, droppedDuringPoll.get(i));
         }
-        pw.println(" mRingingCall=" + mRingingCall);
-        pw.println(" mForegroundCall=" + mForegroundCall);
-        pw.println(" mBackgroundCall=" + mBackgroundCall);
-        pw.println(" mPendingMO=" + mPendingMO);
-        pw.println(" mHangupPendingMO=" + mHangupPendingMO);
-        pw.println(" mPhone=" + mPhone);
-        pw.println(" mDesiredMute=" + mDesiredMute);
-        pw.println(" mState=" + mState);
+        pw.println(" ringingCall=" + ringingCall);
+        pw.println(" foregroundCall=" + foregroundCall);
+        pw.println(" backgroundCall=" + backgroundCall);
+        pw.println(" pendingMO=" + pendingMO);
+        pw.println(" hangupPendingMO=" + hangupPendingMO);
+        pw.println(" phone=" + phone);
+        pw.println(" desiredMute=" + desiredMute);
+        pw.println(" state=" + state);
     }
 }

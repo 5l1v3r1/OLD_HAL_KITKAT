@@ -18,7 +18,7 @@ package com.android.internal.telephony.gsm;
 
 import android.os.HandlerThread;
 import android.test.AndroidTestCase;
-import android.telephony.Rlog;
+import android.util.Log;
 
 import java.nio.charset.Charset;
 
@@ -39,7 +39,7 @@ public class UsimDataDownloadTest extends AndroidTestCase {
         @Override
         protected void onLooperPrepared() {
             synchronized (this) {
-                mHandler = new UsimDataDownloadHandler(mCi);
+                mHandler = new UsimDataDownloadHandler(mCm);
                 notifyAll();
             }
         }
@@ -56,18 +56,18 @@ public class UsimDataDownloadTest extends AndroidTestCase {
         }
     }
 
-    private UsimDataDownloadCommands mCi;
+    private UsimDataDownloadCommands mCm;
     private TestHandlerThread mHandlerThread;
     UsimDataDownloadHandler mHandler;
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        mCi = new UsimDataDownloadCommands(mContext);
+        mCm = new UsimDataDownloadCommands(mContext);
         mHandlerThread = new TestHandlerThread();
         mHandlerThread.start();
         mHandler = mHandlerThread.getHandler();
-        Rlog.d(TAG, "mHandler is constructed");
+        Log.d(TAG, "mHandler is constructed");
     }
 
     @Override
@@ -111,34 +111,34 @@ public class UsimDataDownloadTest extends AndroidTestCase {
         SmsMessage message = SmsMessage.createFromPdu(SMS_PP_MESSAGE_3_1_1);
         assertTrue("message is SMS-PP data download", message.isUsimDataDownload());
 
-        mCi.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_1, 0x90, 0x00, "");
-        mCi.expectAcknowledgeGsmSms(true, 0);
+        mCm.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_1, 0x90, 0x00, "");
+        mCm.expectAcknowledgeGsmSms(true, 0);
         mHandler.startDataDownload(message);
-        mCi.assertExpectedMethodsCalled();
+        mCm.assertExpectedMethodsCalled();
 
-        mCi.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_1, 0x90, 0x00, "0123456789");
-        mCi.expectAcknowledgeGsmSmsWithPdu(true, "00077f16050123456789");
+        mCm.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_1, 0x90, 0x00, "0123456789");
+        mCm.expectAcknowledgeGsmSmsWithPdu(true, "00077f16050123456789");
         mHandler.startDataDownload(message);
-        mCi.assertExpectedMethodsCalled();
+        mCm.assertExpectedMethodsCalled();
 
-        mCi.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_1, 0x62, 0xff, "0123456789abcdef");
-        mCi.expectAcknowledgeGsmSmsWithPdu(false, "00d5077f16080123456789abcdef");
+        mCm.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_1, 0x62, 0xff, "0123456789abcdef");
+        mCm.expectAcknowledgeGsmSmsWithPdu(false, "00d5077f16080123456789abcdef");
         mHandler.startDataDownload(message);
-        mCi.assertExpectedMethodsCalled();
+        mCm.assertExpectedMethodsCalled();
     }
 
     public void testDataDownloadMessage5() {
         SmsMessage message = SmsMessage.createFromPdu(SMS_PP_MESSAGE_3_1_5);
         assertTrue("message is SMS-PP data download", message.isUsimDataDownload());
 
-        mCi.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_5, 0x90, 0x00, "9876543210");
-        mCi.expectAcknowledgeGsmSmsWithPdu(true, "00077ff6059876543210");
+        mCm.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_5, 0x90, 0x00, "9876543210");
+        mCm.expectAcknowledgeGsmSmsWithPdu(true, "00077ff6059876543210");
         mHandler.startDataDownload(message);
-        mCi.assertExpectedMethodsCalled();
+        mCm.assertExpectedMethodsCalled();
 
-        mCi.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_5, 0x93, 0x00, "");
-        mCi.expectAcknowledgeGsmSms(false, 0xd4);   // SIM toolkit busy
+        mCm.expectSendEnvelope(SMS_PP_ENVELOPE_3_1_5, 0x93, 0x00, "");
+        mCm.expectAcknowledgeGsmSms(false, 0xd4);   // SIM toolkit busy
         mHandler.startDataDownload(message);
-        mCi.assertExpectedMethodsCalled();
+        mCm.assertExpectedMethodsCalled();
     }
 }

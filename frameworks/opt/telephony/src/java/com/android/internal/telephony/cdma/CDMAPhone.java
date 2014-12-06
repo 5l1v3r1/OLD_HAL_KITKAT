@@ -33,41 +33,45 @@ import android.os.RegistrantList;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.preference.PreferenceManager;
-import android.provider.Settings;
 import android.provider.Telephony;
 import android.telephony.CellLocation;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.ServiceState;
-import android.telephony.cdma.CdmaCellLocation;
+import android.telephony.SignalStrength;
 import android.text.TextUtils;
-import android.telephony.Rlog;
+import android.util.Log;
 
+import com.android.internal.telephony.Call;
 import com.android.internal.telephony.CallStateException;
 import com.android.internal.telephony.CallTracker;
 import com.android.internal.telephony.CommandException;
 import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.Connection;
+import com.android.internal.telephony.IccCard;
+import com.android.internal.telephony.IccException;
+import com.android.internal.telephony.IccFileHandler;
 import com.android.internal.telephony.IccPhoneBookInterfaceManager;
+import com.android.internal.telephony.IccRecords;
 import com.android.internal.telephony.IccSmsInterfaceManager;
 import com.android.internal.telephony.MccTable;
 import com.android.internal.telephony.MmiCode;
 import com.android.internal.telephony.OperatorInfo;
+import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneBase;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneNotifier;
 import com.android.internal.telephony.PhoneProxy;
 import com.android.internal.telephony.PhoneSubInfo;
 import com.android.internal.telephony.ServiceStateTracker;
-import com.android.internal.telephony.SmsBroadcastUndelivered;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.TelephonyProperties;
+import com.android.internal.telephony.UiccCard;
+import com.android.internal.telephony.UiccCardApplication;
 import com.android.internal.telephony.UUSInfo;
-import com.android.internal.telephony.dataconnection.DcTracker;
-import com.android.internal.telephony.uicc.IccException;
-import com.android.internal.telephony.uicc.IccRecords;
-import com.android.internal.telephony.uicc.RuimRecords;
-import com.android.internal.telephony.uicc.UiccCardApplication;
+import com.android.internal.telephony.IccCardApplicationStatus.AppState;
+import com.android.internal.telephony.cat.CatService;
 import com.android.internal.telephony.uicc.UiccController;
+
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -83,7 +87,7 @@ import static com.android.internal.telephony.TelephonyProperties.PROPERTY_ICC_OP
  * {@hide}
  */
 public class CDMAPhone extends PhoneBase {
-    static final String LOG_TAG = "CDMAPhone";
+    static final String LOG_TAG = "CDMA";
     private static final boolean DBG = true;
     private static final boolean VDBG = false; /* STOP SHIP if true */
 
@@ -103,6 +107,7 @@ public class CDMAPhone extends PhoneBase {
     CdmaSubscriptionSourceManager mCdmaSSM;
     ArrayList <CdmaMmiCode> mPendingMmis = new ArrayList<CdmaMmiCode>();
     RuimPhoneBookInterfaceManager mRuimPhoneBookInterfaceManager;
+    RuimSmsInterfaceManager mRuimSmsInterfaceManager;
     int mCdmaSubscriptionSource = CdmaSubscriptionSourceManager.SUBSCRIPTION_SOURCE_UNKNOWN;
     PhoneSubInfo mSubInfo;
     EriManager mEriManager;
@@ -140,14 +145,14 @@ public class CDMAPhone extends PhoneBase {
 
     // Constructors
     public CDMAPhone(Context context, CommandsInterface ci, PhoneNotifier notifier) {
-        super("CDMA", notifier, context, ci, false);
+        super(notifier, context, ci, false);
         initSstIcc();
         init(context, notifier);
     }
 
     public CDMAPhone(Context context, CommandsInterface ci, PhoneNotifier notifier,
             boolean unitTestMode) {
-        super("CDMA", notifier, context, ci, unitTestMode);
+        super(notifier, context, ci, unitTestMode);
         initSstIcc();
         init(context, notifier);
     }
@@ -157,23 +162,23 @@ public class CDMAPhone extends PhoneBase {
     }
 
     protected void init(Context context, PhoneNotifier notifier) {
-        mCi.setPhoneType(PhoneConstants.PHONE_TYPE_CDMA);
+        mCM.setPhoneType(PhoneConstants.PHONE_TYPE_CDMA);
         mCT = new CdmaCallTracker(this);
-        mCdmaSSM = CdmaSubscriptionSourceManager.getInstance(context, mCi, this,
+        mCdmaSSM = CdmaSubscriptionSourceManager.getInstance(context, mCM, this,
                 EVENT_CDMA_SUBSCRIPTION_SOURCE_CHANGED, null);
-        mDcTracker = new DcTracker(this);
+        mSMS = new CdmaSMSDispatcher(this, mSmsStorageMonitor, mSmsUsageMonitor);
+        mDataConnectionTracker = new CdmaDataConnectionTracker (this);
         mRuimPhoneBookInterfaceManager = new RuimPhoneBookInterfaceManager(this);
+        mRuimSmsInterfaceManager = new RuimSmsInterfaceManager(this, mSMS);
         mSubInfo = new PhoneSubInfo(this);
         mEriManager = new EriManager(this, context, EriManager.ERI_FROM_XML);
 
-        mCi.registerForAvailable(this, EVENT_RADIO_AVAILABLE, null);
-        mCi.registerForOffOrNotAvailable(this, EVENT_RADIO_OFF_OR_NOT_AVAILABLE, null);
-        mCi.registerForOn(this, EVENT_RADIO_ON, null);
-        mCi.setOnSuppServiceNotification(this, EVENT_SSN, null);
+        mCM.registerForAvailable(this, EVENT_RADIO_AVAILABLE, null);
+        mCM.registerForOffOrNotAvailable(this, EVENT_RADIO_OFF_OR_NOT_AVAILABLE, null);
+        mCM.registerForOn(this, EVENT_RADIO_ON, null);
+        mCM.setOnSuppServiceNotification(this, EVENT_SSN, null);
         mSST.registerForNetworkAttached(this, EVENT_REGISTERED_TO_NETWORK, null);
-        mCi.setEmergencyCallbackMode(this, EVENT_EMERGENCY_CALLBACK_MODE_ENTER, null);
-        mCi.registerForExitEmergencyCallbackMode(this, EVENT_EXIT_EMERGENCY_CALLBACK_RESPONSE,
-                null);
+        mCM.setEmergencyCallbackMode(this, EVENT_EMERGENCY_CALLBACK_MODE_ENTER, null);
 
         PowerManager pm
             = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
@@ -188,30 +193,25 @@ public class CDMAPhone extends PhoneBase {
         mIsPhoneInEcmState = inEcm.equals("true");
         if (mIsPhoneInEcmState) {
             // Send a message which will invoke handleExitEmergencyCallbackMode
-            mCi.exitEmergencyCallbackMode(obtainMessage(EVENT_EXIT_EMERGENCY_CALLBACK_RESPONSE));
+            mCM.exitEmergencyCallbackMode(obtainMessage(EVENT_EXIT_EMERGENCY_CALLBACK_RESPONSE));
         }
 
         // get the string that specifies the carrier OTA Sp number
         mCarrierOtaSpNumSchema = SystemProperties.get(
                 TelephonyProperties.PROPERTY_OTASP_NUM_SCHEMA,"");
 
-        // Sets operator properties by retrieving from build-time system property
+        // Sets operator alpha property by retrieving from build-time system property
         String operatorAlpha = SystemProperties.get("ro.cdma.home.operator.alpha");
+        setSystemProperty(PROPERTY_ICC_OPERATOR_ALPHA, operatorAlpha);
+
+        // Sets operator numeric property by retrieving from build-time system property
         String operatorNumeric = SystemProperties.get(PROPERTY_CDMA_HOME_OPERATOR_NUMERIC);
-        log("init: operatorAlpha='" + operatorAlpha
-                + "' operatorNumeric='" + operatorNumeric + "'");
-        if (mUiccController.getUiccCardApplication(UiccController.APP_FAM_3GPP) == null) {
-            log("init: APP_FAM_3GPP == NULL");
-            if (!TextUtils.isEmpty(operatorAlpha)) {
-                log("init: set 'gsm.sim.operator.alpha' to operator='" + operatorAlpha + "'");
-                setSystemProperty(PROPERTY_ICC_OPERATOR_ALPHA, operatorAlpha);
-            }
-            if (!TextUtils.isEmpty(operatorNumeric)) {
-                log("init: set 'gsm.sim.operator.numeric' to operator='" + operatorNumeric + "'");
-                setSystemProperty(PROPERTY_ICC_OPERATOR_NUMERIC, operatorNumeric);
-            }
-            setIsoCountryProperty(operatorNumeric);
-        }
+        log("CDMAPhone: init set 'gsm.sim.operator.numeric' to operator='" +
+                operatorNumeric + "'");
+        setSystemProperty(PROPERTY_ICC_OPERATOR_NUMERIC, operatorNumeric);
+
+        // Sets iso country property by retrieving from build-time system property
+        setIsoCountryProperty(operatorNumeric);
 
         // Sets current entry in the telephony carrier table
         updateCurrentCarrierInProvider(operatorNumeric);
@@ -228,22 +228,23 @@ public class CDMAPhone extends PhoneBase {
 
             //Unregister from all former registered events
             unregisterForRuimRecordEvents();
-            mCi.unregisterForAvailable(this); //EVENT_RADIO_AVAILABLE
-            mCi.unregisterForOffOrNotAvailable(this); //EVENT_RADIO_OFF_OR_NOT_AVAILABLE
-            mCi.unregisterForOn(this); //EVENT_RADIO_ON
+            mCM.unregisterForAvailable(this); //EVENT_RADIO_AVAILABLE
+            mCM.unregisterForOffOrNotAvailable(this); //EVENT_RADIO_OFF_OR_NOT_AVAILABLE
+            mCM.unregisterForOn(this); //EVENT_RADIO_ON
             mSST.unregisterForNetworkAttached(this); //EVENT_REGISTERED_TO_NETWORK
-            mCi.unSetOnSuppServiceNotification(this);
-            mCi.unregisterForExitEmergencyCallbackMode(this);
+            mCM.unSetOnSuppServiceNotification(this);
             removeCallbacks(mExitEcmRunnable);
 
             mPendingMmis.clear();
 
             //Force all referenced classes to unregister their former registered events
             mCT.dispose();
-            mDcTracker.dispose();
+            mDataConnectionTracker.dispose();
             mSST.dispose();
             mCdmaSSM.dispose(this);
+            mSMS.dispose();
             mRuimPhoneBookInterfaceManager.dispose();
+            mRuimSmsInterfaceManager.dispose();
             mSubInfo.dispose();
             mEriManager.dispose();
         }
@@ -253,6 +254,7 @@ public class CDMAPhone extends PhoneBase {
     public void removeReferences() {
         log("removeReferences");
         mRuimPhoneBookInterfaceManager = null;
+        mRuimSmsInterfaceManager = null;
         mSubInfo = null;
         mCT = null;
         mSST = null;
@@ -263,87 +265,77 @@ public class CDMAPhone extends PhoneBase {
 
     @Override
     protected void finalize() {
-        if(DBG) Rlog.d(LOG_TAG, "CDMAPhone finalized");
+        if(DBG) Log.d(LOG_TAG, "CDMAPhone finalized");
         if (mWakeLock.isHeld()) {
-            Rlog.e(LOG_TAG, "UNEXPECTED; mWakeLock is held when finalizing.");
+            Log.e(LOG_TAG, "UNEXPECTED; mWakeLock is held when finalizing.");
             mWakeLock.release();
         }
     }
 
-    @Override
     public ServiceState getServiceState() {
-        return mSST.mSS;
+        return mSST.ss;
     }
 
-    @Override
     public CallTracker getCallTracker() {
         return mCT;
     }
 
-    @Override
     public PhoneConstants.State getState() {
-        return mCT.mState;
+        return mCT.state;
     }
 
-    @Override
     public ServiceStateTracker getServiceStateTracker() {
         return mSST;
     }
 
-    @Override
+    public String getPhoneName() {
+        return "CDMA";
+    }
+
     public int getPhoneType() {
         return PhoneConstants.PHONE_TYPE_CDMA;
     }
 
-    @Override
     public boolean canTransfer() {
-        Rlog.e(LOG_TAG, "canTransfer: not possible in CDMA");
+        Log.e(LOG_TAG, "canTransfer: not possible in CDMA");
         return false;
     }
 
-    @Override
     public CdmaCall getRingingCall() {
-        return mCT.mRingingCall;
+        return mCT.ringingCall;
     }
 
-    @Override
     public void setMute(boolean muted) {
         mCT.setMute(muted);
     }
 
-    @Override
     public boolean getMute() {
         return mCT.getMute();
     }
 
-    @Override
-    public void conference() {
+    public void conference() throws CallStateException {
         // three way calls in CDMA will be handled by feature codes
-        Rlog.e(LOG_TAG, "conference: not possible in CDMA");
+        Log.e(LOG_TAG, "conference: not possible in CDMA");
     }
 
-    @Override
     public void enableEnhancedVoicePrivacy(boolean enable, Message onComplete) {
-        mCi.setPreferredVoicePrivacy(enable, onComplete);
+        this.mCM.setPreferredVoicePrivacy(enable, onComplete);
     }
 
-    @Override
     public void getEnhancedVoicePrivacy(Message onComplete) {
-        mCi.getPreferredVoicePrivacy(onComplete);
+        this.mCM.getPreferredVoicePrivacy(onComplete);
     }
 
-    @Override
     public void clearDisconnected() {
         mCT.clearDisconnected();
     }
 
-    @Override
     public DataActivityState getDataActivityState() {
         DataActivityState ret = DataActivityState.NONE;
 
         if (mSST.getCurrentDataConnectionState() == ServiceState.STATE_IN_SERVICE) {
 
-            switch (mDcTracker.getActivity()) {
+            switch (mDataConnectionTracker.getActivity()) {
                 case DATAIN:
                     ret = DataActivityState.DATAIN;
                 break;
@@ -359,16 +351,11 @@ public class CDMAPhone extends PhoneBase {
                 case DORMANT:
                     ret = DataActivityState.DORMANT;
                 break;
-
-                default:
-                    ret = DataActivityState.NONE;
-                break;
             }
         }
         return ret;
     }
 
-    @Override
     public Connection
     dial (String dialString) throws CallStateException {
         // Need to make sure dialString gets parsed properly
@@ -376,37 +363,31 @@ public class CDMAPhone extends PhoneBase {
         return mCT.dial(newDialString);
     }
 
-    @Override
     public Connection dial(String dialString, UUSInfo uusInfo) throws CallStateException {
         throw new CallStateException("Sending UUS information NOT supported in CDMA!");
     }
 
-    @Override
     public boolean
     getMessageWaitingIndicator() {
         return (getVoiceMessageCount() > 0);
     }
 
-    @Override
     public List<? extends MmiCode>
     getPendingMmiCodes() {
         return mPendingMmis;
     }
 
-    @Override
     public void registerForSuppServiceNotification(
             Handler h, int what, Object obj) {
-        Rlog.e(LOG_TAG, "method registerForSuppServiceNotification is NOT supported in CDMA!");
+        Log.e(LOG_TAG, "method registerForSuppServiceNotification is NOT supported in CDMA!");
     }
 
-    @Override
     public CdmaCall getBackgroundCall() {
-        return mCT.mBackgroundCall;
+        return mCT.backgroundCall;
     }
 
-    @Override
     public boolean handleInCallMmiCommands(String dialString) {
-        Rlog.e(LOG_TAG, "method handleInCallMmiCommands is NOT supported in CDMA!");
+        Log.e(LOG_TAG, "method handleInCallMmiCommands is NOT supported in CDMA!");
         return false;
     }
 
@@ -419,175 +400,123 @@ public class CDMAPhone extends PhoneBase {
                 .isAlive());
     }
 
-    @Override
     public void
     setNetworkSelectionModeAutomatic(Message response) {
-        Rlog.e(LOG_TAG, "method setNetworkSelectionModeAutomatic is NOT supported in CDMA!");
+        Log.e(LOG_TAG, "method setNetworkSelectionModeAutomatic is NOT supported in CDMA!");
     }
 
-    @Override
     public void unregisterForSuppServiceNotification(Handler h) {
-        Rlog.e(LOG_TAG, "method unregisterForSuppServiceNotification is NOT supported in CDMA!");
+        Log.e(LOG_TAG, "method unregisterForSuppServiceNotification is NOT supported in CDMA!");
     }
 
-    @Override
     public void
     acceptCall() throws CallStateException {
         mCT.acceptCall();
     }
 
-    @Override
     public void
     rejectCall() throws CallStateException {
         mCT.rejectCall();
     }
 
-    @Override
     public void
     switchHoldingAndActive() throws CallStateException {
         mCT.switchWaitingOrHoldingAndActive();
     }
 
-    @Override
-    public String getIccSerialNumber() {
-        IccRecords r = mIccRecords.get();
-        if (r == null) {
-            // to get ICCID form SIMRecords because it is on MF.
-            r = mUiccController.getIccRecords(UiccController.APP_FAM_3GPP);
-        }
-        return (r != null) ? r.getIccId() : null;
-    }
-
-    @Override
     public String getLine1Number() {
         return mSST.getMdnNumber();
     }
 
-    @Override
     public String getCdmaPrlVersion(){
         return mSST.getPrlVersion();
     }
 
-    @Override
     public String getCdmaMin() {
         return mSST.getCdmaMin();
     }
 
-    @Override
     public boolean isMinInfoReady() {
         return mSST.isMinInfoReady();
     }
 
-    @Override
     public void getCallWaiting(Message onComplete) {
-        mCi.queryCallWaiting(CommandsInterface.SERVICE_CLASS_VOICE, onComplete);
+        mCM.queryCallWaiting(CommandsInterface.SERVICE_CLASS_VOICE, onComplete);
     }
 
-    @Override
     public void
     setRadioPower(boolean power) {
         mSST.setRadioPower(power);
     }
 
-    @Override
     public String getEsn() {
         return mEsn;
     }
 
-    @Override
     public String getMeid() {
         return mMeid;
     }
 
     //returns MEID or ESN in CDMA
-    @Override
     public String getDeviceId() {
         String id = getMeid();
         if ((id == null) || id.matches("^0*$")) {
-            Rlog.d(LOG_TAG, "getDeviceId(): MEID is not initialized use ESN");
+            Log.d(LOG_TAG, "getDeviceId(): MEID is not initialized use ESN");
             id = getEsn();
         }
         return id;
     }
 
-    @Override
     public String getDeviceSvn() {
-        Rlog.d(LOG_TAG, "getDeviceSvn(): return 0");
+        Log.d(LOG_TAG, "getDeviceSvn(): return 0");
         return "0";
     }
 
-    @Override
     public String getSubscriberId() {
         return mSST.getImsi();
     }
 
-    @Override
-    public String getGroupIdLevel1() {
-        Rlog.e(LOG_TAG, "GID1 is not available in CDMA");
-        return null;
-    }
-
-    @Override
     public String getImei() {
-        Rlog.e(LOG_TAG, "IMEI is not available in CDMA");
+        Log.e(LOG_TAG, "IMEI is not available in CDMA");
         return null;
     }
 
-    @Override
     public boolean canConference() {
-        Rlog.e(LOG_TAG, "canConference: not possible in CDMA");
+        Log.e(LOG_TAG, "canConference: not possible in CDMA");
         return false;
     }
 
-    @Override
     public CellLocation getCellLocation() {
-        CdmaCellLocation loc = mSST.mCellLoc;
-
-        int mode = Settings.Secure.getInt(getContext().getContentResolver(),
-                Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF);
-        if (mode == Settings.Secure.LOCATION_MODE_OFF) {
-            // clear lat/long values for location privacy
-            CdmaCellLocation privateLoc = new CdmaCellLocation();
-            privateLoc.setCellLocationData(loc.getBaseStationId(),
-                    CdmaCellLocation.INVALID_LAT_LONG,
-                    CdmaCellLocation.INVALID_LAT_LONG,
-                    loc.getSystemId(), loc.getNetworkId());
-            loc = privateLoc;
-        }
-        return loc;
+        return mSST.cellLoc;
     }
 
-    @Override
     public CdmaCall getForegroundCall() {
-        return mCT.mForegroundCall;
+        return mCT.foregroundCall;
     }
 
-    @Override
     public void
     selectNetworkManually(OperatorInfo network,
             Message response) {
-        Rlog.e(LOG_TAG, "selectNetworkManually: not possible in CDMA");
+        Log.e(LOG_TAG, "selectNetworkManually: not possible in CDMA");
     }
 
-    @Override
     public void setOnPostDialCharacter(Handler h, int what, Object obj) {
         mPostDialHandler = new Registrant(h, what, obj);
     }
 
-    @Override
     public boolean handlePinMmi(String dialString) {
-        CdmaMmiCode mmi = CdmaMmiCode.newFromDialString(dialString, this, mUiccApplication.get());
+        CdmaMmiCode mmi = CdmaMmiCode.newFromDialString(dialString, this);
 
         if (mmi == null) {
-            Rlog.e(LOG_TAG, "Mmi is NULL!");
+            Log.e(LOG_TAG, "Mmi is NULL!");
             return false;
-        } else if (mmi.isPinPukCommand()) {
+        } else if (mmi.isPukCommand()) {
             mPendingMmis.add(mmi);
             mMmiRegistrants.notifyRegistrants(new AsyncResult(null, mmi, null));
             mmi.processCode();
             return true;
         }
-        Rlog.e(LOG_TAG, "Unrecognized mmi!");
+        Log.e(LOG_TAG, "Unrecognized mmi!");
         return false;
     }
 
@@ -607,67 +536,54 @@ public class CDMAPhone extends PhoneBase {
         }
     }
 
-    @Override
     public void setLine1Number(String alphaTag, String number, Message onComplete) {
-        Rlog.e(LOG_TAG, "setLine1Number: not possible in CDMA");
+        Log.e(LOG_TAG, "setLine1Number: not possible in CDMA");
     }
 
-    @Override
     public void setCallWaiting(boolean enable, Message onComplete) {
-        Rlog.e(LOG_TAG, "method setCallWaiting is NOT supported in CDMA!");
+        Log.e(LOG_TAG, "method setCallWaiting is NOT supported in CDMA!");
     }
 
-    @Override
     public void updateServiceLocation() {
         mSST.enableSingleLocationUpdate();
     }
 
-    @Override
     public void setDataRoamingEnabled(boolean enable) {
-        mDcTracker.setDataOnRoamingEnabled(enable);
+        mDataConnectionTracker.setDataOnRoamingEnabled(enable);
     }
 
-    @Override
     public void registerForCdmaOtaStatusChange(Handler h, int what, Object obj) {
-        mCi.registerForCdmaOtaProvision(h, what, obj);
+        mCM.registerForCdmaOtaProvision(h, what, obj);
     }
 
-    @Override
     public void unregisterForCdmaOtaStatusChange(Handler h) {
-        mCi.unregisterForCdmaOtaProvision(h);
+        mCM.unregisterForCdmaOtaProvision(h);
     }
 
-    @Override
     public void registerForSubscriptionInfoReady(Handler h, int what, Object obj) {
         mSST.registerForSubscriptionInfoReady(h, what, obj);
     }
 
-    @Override
     public void unregisterForSubscriptionInfoReady(Handler h) {
         mSST.unregisterForSubscriptionInfoReady(h);
     }
 
-    @Override
     public void setOnEcbModeExitResponse(Handler h, int what, Object obj) {
         mEcmExitRespRegistrant = new Registrant (h, what, obj);
     }
 
-    @Override
     public void unsetOnEcbModeExitResponse(Handler h) {
         mEcmExitRespRegistrant.clear();
     }
 
-    @Override
     public void registerForCallWaiting(Handler h, int what, Object obj) {
         mCT.registerForCallWaiting(h, what, obj);
     }
 
-    @Override
     public void unregisterForCallWaiting(Handler h) {
         mCT.unregisterForCallWaiting(h);
     }
 
-    @Override
     public void
     getNeighboringCids(Message response) {
         /*
@@ -686,7 +602,6 @@ public class CDMAPhone extends PhoneBase {
         }
     }
 
-    @Override
     public PhoneConstants.DataState getDataConnectionState(String apnType) {
         PhoneConstants.DataState ret = PhoneConstants.DataState.DISCONNECTED;
 
@@ -699,12 +614,11 @@ public class CDMAPhone extends PhoneBase {
             // If we're out of service, open TCP sockets may still work
             // but no data will flow
             ret = PhoneConstants.DataState.DISCONNECTED;
-        } else if (mDcTracker.isApnTypeEnabled(apnType) == false ||
-                mDcTracker.isApnTypeActive(apnType) == false) {
+        } else if (mDataConnectionTracker.isApnTypeEnabled(apnType) == false ||
+                mDataConnectionTracker.isApnTypeActive(apnType) == false) {
             ret = PhoneConstants.DataState.DISCONNECTED;
         } else {
-            switch (mDcTracker.getState(apnType)) {
-                case RETRYING:
+            switch (mDataConnectionTracker.getState(apnType)) {
                 case FAILED:
                 case IDLE:
                     ret = PhoneConstants.DataState.DISCONNECTED;
@@ -712,7 +626,7 @@ public class CDMAPhone extends PhoneBase {
 
                 case CONNECTED:
                 case DISCONNECTING:
-                    if ( mCT.mState != PhoneConstants.State.IDLE
+                    if ( mCT.state != PhoneConstants.State.IDLE
                             && !mSST.isConcurrentVoiceAndDataAllowed()) {
                         ret = PhoneConstants.DataState.SUSPENDED;
                     } else {
@@ -720,6 +634,7 @@ public class CDMAPhone extends PhoneBase {
                     }
                 break;
 
+                case INITING:
                 case CONNECTING:
                 case SCANNING:
                     ret = PhoneConstants.DataState.CONNECTING;
@@ -731,85 +646,73 @@ public class CDMAPhone extends PhoneBase {
         return ret;
     }
 
-    @Override
     public void sendUssdResponse(String ussdMessge) {
-        Rlog.e(LOG_TAG, "sendUssdResponse: not possible in CDMA");
+        Log.e(LOG_TAG, "sendUssdResponse: not possible in CDMA");
     }
 
-    @Override
     public void sendDtmf(char c) {
         if (!PhoneNumberUtils.is12Key(c)) {
-            Rlog.e(LOG_TAG,
+            Log.e(LOG_TAG,
                     "sendDtmf called with invalid character '" + c + "'");
         } else {
-            if (mCT.mState ==  PhoneConstants.State.OFFHOOK) {
-                mCi.sendDtmf(c, null);
+            if (mCT.state ==  PhoneConstants.State.OFFHOOK) {
+                mCM.sendDtmf(c, null);
             }
         }
     }
 
-    @Override
     public void startDtmf(char c) {
         if (!PhoneNumberUtils.is12Key(c)) {
-            Rlog.e(LOG_TAG,
+            Log.e(LOG_TAG,
                     "startDtmf called with invalid character '" + c + "'");
         } else {
-            mCi.startDtmf(c, null);
+            mCM.startDtmf(c, null);
         }
     }
 
-    @Override
     public void stopDtmf() {
-        mCi.stopDtmf(null);
+        mCM.stopDtmf(null);
     }
 
-    @Override
     public void sendBurstDtmf(String dtmfString, int on, int off, Message onComplete) {
         boolean check = true;
         for (int itr = 0;itr < dtmfString.length(); itr++) {
             if (!PhoneNumberUtils.is12Key(dtmfString.charAt(itr))) {
-                Rlog.e(LOG_TAG,
+                Log.e(LOG_TAG,
                         "sendDtmf called with invalid character '" + dtmfString.charAt(itr)+ "'");
                 check = false;
                 break;
             }
         }
-        if ((mCT.mState ==  PhoneConstants.State.OFFHOOK)&&(check)) {
-            mCi.sendBurstDtmf(dtmfString, on, off, onComplete);
+        if ((mCT.state ==  PhoneConstants.State.OFFHOOK)&&(check)) {
+            mCM.sendBurstDtmf(dtmfString, on, off, onComplete);
         }
      }
 
-    @Override
     public void getAvailableNetworks(Message response) {
-        Rlog.e(LOG_TAG, "getAvailableNetworks: not possible in CDMA");
+        Log.e(LOG_TAG, "getAvailableNetworks: not possible in CDMA");
     }
 
-    @Override
     public void setOutgoingCallerIdDisplay(int commandInterfaceCLIRMode, Message onComplete) {
-        Rlog.e(LOG_TAG, "setOutgoingCallerIdDisplay: not possible in CDMA");
+        Log.e(LOG_TAG, "setOutgoingCallerIdDisplay: not possible in CDMA");
     }
 
-    @Override
     public void enableLocationUpdates() {
         mSST.enableLocationUpdates();
     }
 
-    @Override
     public void disableLocationUpdates() {
         mSST.disableLocationUpdates();
     }
 
-    @Override
     public void getDataCallList(Message response) {
-        mCi.getDataCallList(response);
+        mCM.getDataCallList(response);
     }
 
-    @Override
     public boolean getDataRoamingEnabled() {
-        return mDcTracker.getDataOnRoamingEnabled();
+        return mDataConnectionTracker.getDataOnRoamingEnabled();
     }
 
-    @Override
     public void setVoiceMailNumber(String alphaTag,
                                    String voiceMailNumber,
                                    Message onComplete) {
@@ -822,7 +725,6 @@ public class CDMAPhone extends PhoneBase {
         }
     }
 
-    @Override
     public String getVoiceMailNumber() {
         String number = null;
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
@@ -841,7 +743,6 @@ public class CDMAPhone extends PhoneBase {
     /* Returns Number of Voicemails
      * @hide
      */
-    @Override
     public int getVoiceMessageCount() {
         IccRecords r = mIccRecords.get();
         int voicemailCount =  (r != null) ? r.getVoiceMessageCount() : 0;
@@ -855,7 +756,6 @@ public class CDMAPhone extends PhoneBase {
         return voicemailCount;
     }
 
-    @Override
     public String getVoiceMailAlphaTag() {
         // TODO: Where can we get this value has to be clarified with QC.
         String ret = "";//TODO: Remove = "", if we know where to get this value.
@@ -870,56 +770,48 @@ public class CDMAPhone extends PhoneBase {
         return ret;
     }
 
-    @Override
     public void getCallForwardingOption(int commandInterfaceCFReason, Message onComplete) {
-        Rlog.e(LOG_TAG, "getCallForwardingOption: not possible in CDMA");
+        Log.e(LOG_TAG, "getCallForwardingOption: not possible in CDMA");
     }
 
-    @Override
     public void setCallForwardingOption(int commandInterfaceCFAction,
             int commandInterfaceCFReason,
             String dialingNumber,
             int timerSeconds,
             Message onComplete) {
-        Rlog.e(LOG_TAG, "setCallForwardingOption: not possible in CDMA");
+        Log.e(LOG_TAG, "setCallForwardingOption: not possible in CDMA");
     }
 
-    @Override
     public void
     getOutgoingCallerIdDisplay(Message onComplete) {
-        Rlog.e(LOG_TAG, "getOutgoingCallerIdDisplay: not possible in CDMA");
+        Log.e(LOG_TAG, "getOutgoingCallerIdDisplay: not possible in CDMA");
     }
 
-    @Override
     public boolean
     getCallForwardingIndicator() {
-        Rlog.e(LOG_TAG, "getCallForwardingIndicator: not possible in CDMA");
+        Log.e(LOG_TAG, "getCallForwardingIndicator: not possible in CDMA");
         return false;
     }
 
-    @Override
     public void explicitCallTransfer() {
-        Rlog.e(LOG_TAG, "explicitCallTransfer: not possible in CDMA");
+        Log.e(LOG_TAG, "explicitCallTransfer: not possible in CDMA");
     }
 
-    @Override
     public String getLine1AlphaTag() {
-        Rlog.e(LOG_TAG, "getLine1AlphaTag: not possible in CDMA");
+        Log.e(LOG_TAG, "getLine1AlphaTag: not possible in CDMA");
         return null;
     }
 
     /**
-     * Notify any interested party of a Phone state change
-     * {@link com.android.internal.telephony.PhoneConstants.State}
+     * Notify any interested party of a Phone state change  {@link PhoneConstants.State}
      */
     /*package*/ void notifyPhoneStateChanged() {
         mNotifier.notifyPhoneState(this);
     }
 
     /**
-     * Notify registrants of a change in the call state. This notifies changes in
-     * {@link com.android.internal.telephony.Call.State}. Use this when changes
-     * in the precise call state are needed, else use notifyPhoneStateChanged.
+     * Notify registrants of a change in the call state. This notifies changes in {@link Call.State}
+     * Use this when changes in the precise call state are needed, else use notifyPhoneStateChanged.
      */
     /*package*/ void notifyPreciseCallStateChanged() {
         /* we'd love it if this was package-scoped*/
@@ -947,12 +839,10 @@ public class CDMAPhone extends PhoneBase {
         mUnknownConnectionRegistrants.notifyResult(this);
     }
 
-    @Override
     public boolean isInEmergencyCall() {
         return mCT.isInEmergencyCall();
     }
 
-    @Override
     public boolean isInEcm() {
         return mIsPhoneInEcmState;
     }
@@ -962,7 +852,7 @@ public class CDMAPhone extends PhoneBase {
         Intent intent = new Intent(TelephonyIntents.ACTION_EMERGENCY_CALLBACK_MODE_CHANGED);
         intent.putExtra(PhoneConstants.PHONE_IN_ECM_STATE, mIsPhoneInEcmState);
         ActivityManagerNative.broadcastStickyIntent(intent,null,UserHandle.USER_ALL);
-        if (DBG) Rlog.d(LOG_TAG, "sendEmergencyCallbackModeChange");
+        if (DBG) Log.d(LOG_TAG, "sendEmergencyCallbackModeChange");
     }
 
     @Override
@@ -971,12 +861,12 @@ public class CDMAPhone extends PhoneBase {
             mWakeLock.release();
         }
         // Send a message which will invoke handleExitEmergencyCallbackMode
-        mCi.exitEmergencyCallbackMode(obtainMessage(EVENT_EXIT_EMERGENCY_CALLBACK_RESPONSE));
+        mCM.exitEmergencyCallbackMode(obtainMessage(EVENT_EXIT_EMERGENCY_CALLBACK_RESPONSE));
     }
 
     private void handleEnterEmergencyCallbackMode(Message msg) {
         if (DBG) {
-            Rlog.d(LOG_TAG, "handleEnterEmergencyCallbackMode,mIsPhoneInEcmState= "
+            Log.d(LOG_TAG, "handleEnterEmergencyCallbackMode,mIsPhoneInEcmState= "
                     + mIsPhoneInEcmState);
         }
         // if phone is not in Ecm mode, and it's changed to Ecm mode
@@ -999,7 +889,7 @@ public class CDMAPhone extends PhoneBase {
     private void handleExitEmergencyCallbackMode(Message msg) {
         AsyncResult ar = (AsyncResult)msg.obj;
         if (DBG) {
-            Rlog.d(LOG_TAG, "handleExitEmergencyCallbackMode,ar.exception , mIsPhoneInEcmState "
+            Log.d(LOG_TAG, "handleExitEmergencyCallbackMode,ar.exception , mIsPhoneInEcmState "
                     + ar.exception + mIsPhoneInEcmState);
         }
         // Remove pending exit Ecm runnable, if any
@@ -1017,7 +907,7 @@ public class CDMAPhone extends PhoneBase {
             // send an Intent
             sendEmergencyCallbackModeChange();
             // Re-initiate data connection
-            mDcTracker.setInternalDataEnabled(true);
+            mDataConnectionTracker.setInternalDataEnabled(true);
         }
     }
 
@@ -1039,7 +929,7 @@ public class CDMAPhone extends PhoneBase {
             mEcmTimerResetRegistrants.notifyResult(Boolean.FALSE);
             break;
         default:
-            Rlog.e(LOG_TAG, "handleTimerInEmergencyCallbackMode, unsupported action " + action);
+            Log.e(LOG_TAG, "handleTimerInEmergencyCallbackMode, unsupported action " + action);
         }
     }
 
@@ -1049,12 +939,10 @@ public class CDMAPhone extends PhoneBase {
      * @param what User-defined message code
      * @param obj placed in Message.obj
      */
-    @Override
     public void registerForEcmTimerReset(Handler h, int what, Object obj) {
         mEcmTimerResetRegistrants.addUnique(h, what, obj);
     }
 
-    @Override
     public void unregisterForEcmTimerReset(Handler h) {
         mEcmTimerResetRegistrants.remove(h);
     }
@@ -1064,16 +952,11 @@ public class CDMAPhone extends PhoneBase {
         AsyncResult ar;
         Message     onComplete;
 
-        if (!mIsTheCurrentActivePhone) {
-            Rlog.e(LOG_TAG, "Received message " + msg +
-                    "[" + msg.what + "] while being destroyed. Ignoring.");
-            return;
-        }
         switch(msg.what) {
             case EVENT_RADIO_AVAILABLE: {
-                mCi.getBasebandVersion(obtainMessage(EVENT_GET_BASEBAND_VERSION_DONE));
+                mCM.getBasebandVersion(obtainMessage(EVENT_GET_BASEBAND_VERSION_DONE));
 
-                mCi.getDeviceIdentity(obtainMessage(EVENT_GET_DEVICE_IDENTITY_DONE));
+                mCM.getDeviceIdentity(obtainMessage(EVENT_GET_DEVICE_IDENTITY_DONE));
             }
             break;
 
@@ -1084,7 +967,7 @@ public class CDMAPhone extends PhoneBase {
                     break;
                 }
 
-                if (DBG) Rlog.d(LOG_TAG, "Baseband version: " + ar.result);
+                if (DBG) Log.d(LOG_TAG, "Baseband version: " + ar.result);
                 setSystemProperty(TelephonyProperties.PROPERTY_BASEBAND_VERSION, (String)ar.result);
             }
             break;
@@ -1119,40 +1002,40 @@ public class CDMAPhone extends PhoneBase {
             break;
 
             case EVENT_RUIM_RECORDS_LOADED:{
-                Rlog.d(LOG_TAG, "Event EVENT_RUIM_RECORDS_LOADED Received");
+                Log.d(LOG_TAG, "Event EVENT_RUIM_RECORDS_LOADED Received");
                 updateCurrentCarrierInProvider();
             }
             break;
 
             case EVENT_RADIO_OFF_OR_NOT_AVAILABLE:{
-                Rlog.d(LOG_TAG, "Event EVENT_RADIO_OFF_OR_NOT_AVAILABLE Received");
+                Log.d(LOG_TAG, "Event EVENT_RADIO_OFF_OR_NOT_AVAILABLE Received");
             }
             break;
 
             case EVENT_RADIO_ON:{
-                Rlog.d(LOG_TAG, "Event EVENT_RADIO_ON Received");
+                Log.d(LOG_TAG, "Event EVENT_RADIO_ON Received");
                 handleCdmaSubscriptionSource(mCdmaSSM.getCdmaSubscriptionSource());
             }
             break;
 
             case EVENT_CDMA_SUBSCRIPTION_SOURCE_CHANGED:{
-                Rlog.d(LOG_TAG, "EVENT_CDMA_SUBSCRIPTION_SOURCE_CHANGED");
+                Log.d(LOG_TAG, "EVENT_CDMA_SUBSCRIPTION_SOURCE_CHANGED");
                 handleCdmaSubscriptionSource(mCdmaSSM.getCdmaSubscriptionSource());
             }
             break;
 
             case EVENT_SSN:{
-                Rlog.d(LOG_TAG, "Event EVENT_SSN Received");
+                Log.d(LOG_TAG, "Event EVENT_SSN Received");
             }
             break;
 
             case EVENT_REGISTERED_TO_NETWORK:{
-                Rlog.d(LOG_TAG, "Event EVENT_REGISTERED_TO_NETWORK Received");
+                Log.d(LOG_TAG, "Event EVENT_REGISTERED_TO_NETWORK Received");
             }
             break;
 
             case EVENT_NV_READY:{
-                Rlog.d(LOG_TAG, "Event EVENT_NV_READY Received");
+                Log.d(LOG_TAG, "Event EVENT_NV_READY Received");
                 prepareEri();
             }
             break;
@@ -1186,12 +1069,6 @@ public class CDMAPhone extends PhoneBase {
         UiccCardApplication newUiccApplication =
                 mUiccController.getUiccCardApplication(UiccController.APP_FAM_3GPP2);
 
-        if (newUiccApplication == null) {
-            log("can't find 3GPP2 application; trying APP_FAM_3GPP");
-            newUiccApplication = mUiccController
-                    .getUiccCardApplication(UiccController.APP_FAM_3GPP);
-        }
-
         UiccCardApplication app = mUiccApplication.get();
         if (app != newUiccApplication) {
             if (app != null) {
@@ -1220,7 +1097,7 @@ public class CDMAPhone extends PhoneBase {
                 break;
 
             default:
-                Rlog.e(LOG_TAG,"Unknown icc records event code " + eventCode);
+                Log.e(LOG_TAG,"Unknown icc records event code " + eventCode);
                 break;
         }
     }
@@ -1243,15 +1120,20 @@ public class CDMAPhone extends PhoneBase {
     /**
      * Retrieves the PhoneSubInfo of the CDMAPhone
      */
-    @Override
     public PhoneSubInfo getPhoneSubInfo() {
         return mSubInfo;
     }
 
     /**
+     * Retrieves the IccSmsInterfaceManager of the CDMAPhone
+     */
+    public IccSmsInterfaceManager getIccSmsInterfaceManager() {
+        return mRuimSmsInterfaceManager;
+    }
+
+    /**
      * Retrieves the IccPhoneBookInterfaceManager of the CDMAPhone
      */
-    @Override
     public IccPhoneBookInterfaceManager getIccPhoneBookInterfaceManager() {
         return mRuimPhoneBookInterfaceManager;
     }
@@ -1269,7 +1151,6 @@ public class CDMAPhone extends PhoneBase {
     /**
      * {@inheritDoc}
      */
-    @Override
     public final void setSystemProperty(String property, String value) {
         super.setSystemProperty(property, value);
     }
@@ -1280,9 +1161,8 @@ public class CDMAPhone extends PhoneBase {
      * @param activate 0 = activate, 1 = deactivate
      * @param response Callback message is empty on completion
      */
-    @Override
     public void activateCellBroadcastSms(int activate, Message response) {
-        Rlog.e(LOG_TAG, "[CDMAPhone] activateCellBroadcastSms() is obsolete; use SmsManager");
+        Log.e(LOG_TAG, "[CDMAPhone] activateCellBroadcastSms() is obsolete; use SmsManager");
         response.sendToTarget();
     }
 
@@ -1291,9 +1171,8 @@ public class CDMAPhone extends PhoneBase {
      *
      * @param response Callback message is empty on completion
      */
-    @Override
     public void getCellBroadcastSmsConfig(Message response) {
-        Rlog.e(LOG_TAG, "[CDMAPhone] getCellBroadcastSmsConfig() is obsolete; use SmsManager");
+        Log.e(LOG_TAG, "[CDMAPhone] getCellBroadcastSmsConfig() is obsolete; use SmsManager");
         response.sendToTarget();
     }
 
@@ -1302,9 +1181,8 @@ public class CDMAPhone extends PhoneBase {
      *
      * @param response Callback message is empty on completion
      */
-    @Override
     public void setCellBroadcastSmsConfig(int[] configValuesArray, Message response) {
-        Rlog.e(LOG_TAG, "[CDMAPhone] setCellBroadcastSmsConfig() is obsolete; use SmsManager");
+        Log.e(LOG_TAG, "[CDMAPhone] setCellBroadcastSmsConfig() is obsolete; use SmsManager");
         response.sendToTarget();
     }
 
@@ -1376,7 +1254,7 @@ public class CDMAPhone extends PhoneBase {
                                 dialStr.substring (IS683A_FEATURE_CODE_NUM_DIGITS,
                                 IS683A_FEATURE_CODE_NUM_DIGITS + IS683A_SYS_SEL_CODE_NUM_DIGITS));
         }
-        if (DBG) Rlog.d(LOG_TAG, "extractSelCodeFromOtaSpNum " + sysSelCodeInt);
+        if (DBG) Log.d(LOG_TAG, "extractSelCodeFromOtaSpNum " + sysSelCodeInt);
         return sysSelCodeInt;
     }
 
@@ -1390,11 +1268,11 @@ public class CDMAPhone extends PhoneBase {
         boolean isOtaSpNum = false;
         try {
             // Get how many number of system selection code ranges
-            int selRc = Integer.parseInt(sch[1]);
+            int selRc = Integer.parseInt((String)sch[1]);
             for (int i = 0; i < selRc; i++) {
                 if (!TextUtils.isEmpty(sch[i+2]) && !TextUtils.isEmpty(sch[i+3])) {
-                    int selMin = Integer.parseInt(sch[i+2]);
-                    int selMax = Integer.parseInt(sch[i+3]);
+                    int selMin = Integer.parseInt((String)sch[i+2]);
+                    int selMax = Integer.parseInt((String)sch[i+3]);
                     // Check if the selection code extracted from the dial string falls
                     // within any of the range pairs specified in the schema.
                     if ((sysSelCodeInt >= selMin) && (sysSelCodeInt <= selMax)) {
@@ -1406,7 +1284,7 @@ public class CDMAPhone extends PhoneBase {
         } catch (NumberFormatException ex) {
             // If the carrier ota sp number schema is not correct, we still allow dial
             // and only log the error:
-            Rlog.e(LOG_TAG, "checkOtaSpNumBasedOnSysSelCode, error", ex);
+            Log.e(LOG_TAG, "checkOtaSpNumBasedOnSysSelCode, error", ex);
         }
         return isOtaSpNum;
     }
@@ -1443,7 +1321,7 @@ public class CDMAPhone extends PhoneBase {
         if (!TextUtils.isEmpty(mCarrierOtaSpNumSchema)) {
             Matcher m = pOtaSpNumSchema.matcher(mCarrierOtaSpNumSchema);
             if (DBG) {
-                Rlog.d(LOG_TAG, "isCarrierOtaSpNum,schema" + mCarrierOtaSpNumSchema);
+                Log.d(LOG_TAG, "isCarrierOtaSpNum,schema" + mCarrierOtaSpNumSchema);
             }
 
             if (m.find()) {
@@ -1454,30 +1332,30 @@ public class CDMAPhone extends PhoneBase {
                         isOtaSpNum=checkOtaSpNumBasedOnSysSelCode(sysSelCodeInt,sch);
                     } else {
                         if (DBG) {
-                            Rlog.d(LOG_TAG, "isCarrierOtaSpNum,sysSelCodeInt is invalid");
+                            Log.d(LOG_TAG, "isCarrierOtaSpNum,sysSelCodeInt is invalid");
                         }
                     }
                 } else if (!TextUtils.isEmpty(sch[0]) && sch[0].equals("FC")) {
-                    int fcLen =  Integer.parseInt(sch[1]);
-                    String fc = sch[2];
+                    int fcLen =  Integer.parseInt((String)sch[1]);
+                    String fc = (String)sch[2];
                     if (dialStr.regionMatches(0,fc,0,fcLen)) {
                         isOtaSpNum = true;
                     } else {
-                        if (DBG) Rlog.d(LOG_TAG, "isCarrierOtaSpNum,not otasp number");
+                        if (DBG) Log.d(LOG_TAG, "isCarrierOtaSpNum,not otasp number");
                     }
                 } else {
                     if (DBG) {
-                        Rlog.d(LOG_TAG, "isCarrierOtaSpNum,ota schema not supported" + sch[0]);
+                        Log.d(LOG_TAG, "isCarrierOtaSpNum,ota schema not supported" + sch[0]);
                     }
                 }
             } else {
                 if (DBG) {
-                    Rlog.d(LOG_TAG, "isCarrierOtaSpNum,ota schema pattern not right" +
+                    Log.d(LOG_TAG, "isCarrierOtaSpNum,ota schema pattern not right" +
                           mCarrierOtaSpNumSchema);
                 }
             }
         } else {
-            if (DBG) Rlog.d(LOG_TAG, "isCarrierOtaSpNum,ota schema pattern empty");
+            if (DBG) Log.d(LOG_TAG, "isCarrierOtaSpNum,ota schema pattern empty");
         }
         return isOtaSpNum;
     }
@@ -1499,7 +1377,7 @@ public class CDMAPhone extends PhoneBase {
                 isOtaSpNum = isCarrierOtaSpNum(dialableStr);
             }
         }
-        if (DBG) Rlog.d(LOG_TAG, "isOtaSpNumber " + isOtaSpNum);
+        if (DBG) Log.d(LOG_TAG, "isOtaSpNumber " + isOtaSpNum);
         return isOtaSpNum;
     }
 
@@ -1545,7 +1423,6 @@ public class CDMAPhone extends PhoneBase {
      */
     private void setIsoCountryProperty(String operatorNumeric) {
         if (TextUtils.isEmpty(operatorNumeric)) {
-            log("setIsoCountryProperty: clear 'gsm.sim.operator.iso-country'");
             setSystemProperty(PROPERTY_ICC_OPERATOR_ISO_COUNTRY, "");
         } else {
             String iso = "";
@@ -1553,12 +1430,11 @@ public class CDMAPhone extends PhoneBase {
                 iso = MccTable.countryCodeForMcc(Integer.parseInt(
                         operatorNumeric.substring(0,3)));
             } catch (NumberFormatException ex) {
-                loge("setIsoCountryProperty: countryCodeForMcc error", ex);
+                Log.w(LOG_TAG, "countryCodeForMcc error" + ex);
             } catch (StringIndexOutOfBoundsException ex) {
-                loge("setIsoCountryProperty: countryCodeForMcc error", ex);
+                Log.w(LOG_TAG, "countryCodeForMcc error" + ex);
             }
 
-            log("setIsoCountryProperty: set 'gsm.sim.operator.iso-country' to iso=" + iso);
             setSystemProperty(PROPERTY_ICC_OPERATOR_ISO_COUNTRY, iso);
         }
     }
@@ -1570,7 +1446,6 @@ public class CDMAPhone extends PhoneBase {
      * @return true for success; false otherwise.
      */
     boolean updateCurrentCarrierInProvider(String operatorNumeric) {
-        log("CDMAPhone: updateCurrentCarrierInProvider called");
         if (!TextUtils.isEmpty(operatorNumeric)) {
             try {
                 Uri uri = Uri.withAppendedPath(Telephony.Carriers.CONTENT_URI, "current");
@@ -1580,11 +1455,11 @@ public class CDMAPhone extends PhoneBase {
                 getContext().getContentResolver().insert(uri, map);
 
                 // Updates MCC MNC device configuration information
-                MccTable.updateMccMncConfiguration(mContext, operatorNumeric, false);
+                MccTable.updateMccMncConfiguration(mContext, operatorNumeric);
 
                 return true;
             } catch (SQLException e) {
-                Rlog.e(LOG_TAG, "Can't store current operator", e);
+                Log.e(LOG_TAG, "Can't store current operator", e);
             }
         }
         return false;
@@ -1633,12 +1508,7 @@ public class CDMAPhone extends PhoneBase {
 
     protected void log(String s) {
         if (DBG)
-            Rlog.d(LOG_TAG, s);
-    }
-
-    protected void loge(String s, Exception e) {
-        if (DBG)
-            Rlog.e(LOG_TAG, s, e);
+            Log.d(LOG_TAG, "[CDMAPhone] " + s);
     }
 
     @Override
@@ -1651,6 +1521,7 @@ public class CDMAPhone extends PhoneBase {
         pw.println(" mCdmaSSM=" + mCdmaSSM);
         pw.println(" mPendingMmis=" + mPendingMmis);
         pw.println(" mRuimPhoneBookInterfaceManager=" + mRuimPhoneBookInterfaceManager);
+        pw.println(" mRuimSmsInterfaceManager=" + mRuimSmsInterfaceManager);
         pw.println(" mCdmaSubscriptionSource=" + mCdmaSubscriptionSource);
         pw.println(" mSubInfo=" + mSubInfo);
         pw.println(" mEriManager=" + mEriManager);

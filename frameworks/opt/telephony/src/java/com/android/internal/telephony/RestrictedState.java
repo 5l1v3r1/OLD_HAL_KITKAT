@@ -16,6 +16,8 @@
 
 package com.android.internal.telephony;
 
+import android.telephony.ServiceState;
+
 public class RestrictedState {
 
     /**

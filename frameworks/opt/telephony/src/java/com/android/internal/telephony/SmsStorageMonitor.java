@@ -25,7 +25,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.PowerManager;
 import android.provider.Telephony.Sms.Intents;
-import android.telephony.Rlog;
+import android.util.Log;
 
 /**
  * Monitors the device and ICC storage, and sends the appropriate events.
@@ -54,7 +54,7 @@ public final class SmsStorageMonitor extends Handler {
 
     private boolean mReportMemoryStatusPending;
 
-    final CommandsInterface mCi;                            // accessed from inner class
+    final CommandsInterface mCm;                            // accessed from inner class
     boolean mStorageAvailable = true;                       // accessed from inner class
 
     /**
@@ -69,12 +69,12 @@ public final class SmsStorageMonitor extends Handler {
      */
     public SmsStorageMonitor(PhoneBase phone) {
         mContext = phone.getContext();
-        mCi = phone.mCi;
+        mCm = phone.mCM;
 
         createWakelock();
 
-        mCi.setOnIccSmsFull(this, EVENT_ICC_FULL, null);
-        mCi.registerForOn(this, EVENT_RADIO_ON, null);
+        mCm.setOnIccSmsFull(this, EVENT_ICC_FULL, null);
+        mCm.registerForOn(this, EVENT_RADIO_ON, null);
 
         // Register for device storage intents.  Use these to notify the RIL
         // that storage for SMS is or is not available.
@@ -85,8 +85,8 @@ public final class SmsStorageMonitor extends Handler {
     }
 
     public void dispose() {
-        mCi.unSetOnIccSmsFull(this);
-        mCi.unregisterForOn(this);
+        mCm.unSetOnIccSmsFull(this);
+        mCm.unregisterForOn(this);
         mContext.unregisterReceiver(mResultReceiver);
     }
 
@@ -107,7 +107,7 @@ public final class SmsStorageMonitor extends Handler {
                 ar = (AsyncResult) msg.obj;
                 if (ar.exception != null) {
                     mReportMemoryStatusPending = true;
-                    Rlog.v(TAG, "Memory status report to modem pending : mStorageAvailable = "
+                    Log.v(TAG, "Memory status report to modem pending : mStorageAvailable = "
                             + mStorageAvailable);
                 } else {
                     mReportMemoryStatusPending = false;
@@ -116,9 +116,9 @@ public final class SmsStorageMonitor extends Handler {
 
             case EVENT_RADIO_ON:
                 if (mReportMemoryStatusPending) {
-                    Rlog.v(TAG, "Sending pending memory status report : mStorageAvailable = "
+                    Log.v(TAG, "Sending pending memory status report : mStorageAvailable = "
                             + mStorageAvailable);
-                    mCi.reportSmsMemoryStatus(mStorageAvailable,
+                    mCm.reportSmsMemoryStatus(mStorageAvailable,
                             obtainMessage(EVENT_REPORT_MEMORY_STATUS_DONE));
                 }
                 break;
@@ -139,7 +139,7 @@ public final class SmsStorageMonitor extends Handler {
         // broadcast SIM_FULL intent
         Intent intent = new Intent(Intents.SIM_FULL_ACTION);
         mWakeLock.acquire(WAKE_LOCK_TIMEOUT);
-        mContext.sendBroadcast(intent, android.Manifest.permission.RECEIVE_SMS);
+        mContext.sendBroadcast(intent, SMSDispatcher.RECEIVE_SMS_PERMISSION);
     }
 
     /** Returns whether or not there is storage available for an incoming SMS. */
@@ -152,10 +152,10 @@ public final class SmsStorageMonitor extends Handler {
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals(Intent.ACTION_DEVICE_STORAGE_FULL)) {
                 mStorageAvailable = false;
-                mCi.reportSmsMemoryStatus(false, obtainMessage(EVENT_REPORT_MEMORY_STATUS_DONE));
+                mCm.reportSmsMemoryStatus(false, obtainMessage(EVENT_REPORT_MEMORY_STATUS_DONE));
             } else if (intent.getAction().equals(Intent.ACTION_DEVICE_STORAGE_NOT_FULL)) {
                 mStorageAvailable = true;
-                mCi.reportSmsMemoryStatus(true, obtainMessage(EVENT_REPORT_MEMORY_STATUS_DONE));
+                mCm.reportSmsMemoryStatus(true, obtainMessage(EVENT_REPORT_MEMORY_STATUS_DONE));
             }
         }
     };

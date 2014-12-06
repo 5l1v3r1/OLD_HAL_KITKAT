@@ -21,8 +21,6 @@ import com.android.internal.telephony.TestPhoneNotifier;
 import com.android.internal.telephony.gsm.SmsMessage;
 import com.android.internal.telephony.test.SimulatedCommands;
 import com.android.internal.telephony.test.SimulatedRadioControl;
-import com.android.internal.telephony.uicc.IccUtils;
-
 import android.test.AndroidTestCase;
 import android.test.suitebuilder.annotation.Suppress;
 

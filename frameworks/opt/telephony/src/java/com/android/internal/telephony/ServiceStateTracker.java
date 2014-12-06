@@ -19,6 +19,7 @@ package com.android.internal.telephony;
 import android.content.Context;
 import android.os.AsyncResult;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Registrant;
 import android.os.RegistrantList;
@@ -26,45 +27,31 @@ import android.os.SystemClock;
 import android.telephony.CellInfo;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
-import android.text.TextUtils;
-import android.util.Pair;
 import android.util.TimeUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.List;
 
-import com.android.internal.telephony.dataconnection.DcTrackerBase;
-import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppState;
-import com.android.internal.telephony.uicc.IccRecords;
-import com.android.internal.telephony.uicc.UiccCardApplication;
+import com.android.internal.telephony.IccCardApplicationStatus.AppState;
 import com.android.internal.telephony.uicc.UiccController;
 
 /**
  * {@hide}
  */
 public abstract class ServiceStateTracker extends Handler {
-    protected  static final boolean DBG = true;
-    protected static final boolean VDBG = false;
 
-    protected static final String PROP_FORCE_ROAMING = "telephony.test.forceRoaming";
-
-    protected CommandsInterface mCi;
+    protected CommandsInterface cm;
     protected UiccController mUiccController = null;
     protected UiccCardApplication mUiccApplcation = null;
     protected IccRecords mIccRecords = null;
 
     protected PhoneBase mPhoneBase;
 
-    protected boolean mVoiceCapable;
+    public ServiceState ss = new ServiceState();
+    protected ServiceState newSS = new ServiceState();
 
-    public ServiceState mSS = new ServiceState();
-    protected ServiceState mNewSS = new ServiceState();
-
-    private static final long LAST_CELL_INFO_LIST_MAX_AGE_MS = 2000;
-    protected long mLastCellInfoListTime;
-    protected List<CellInfo> mLastCellInfoList = null;
+    protected CellInfo mLastCellInfo = null;
 
     // This is final as subclasses alias to a more specific type
     // so we don't want the reference to change.
@@ -86,21 +73,26 @@ public abstract class ServiceStateTracker extends Handler {
      * and ignore stale responses.  The value is a count-down of
      * expected responses in this pollingContext.
      */
-    protected int[] mPollingContext;
+    protected int[] pollingContext;
     protected boolean mDesiredPowerState;
+
+    /**
+     *  Values correspond to ServiceState.RIL_RADIO_TECHNOLOGY_ definitions.
+     */
+    protected int mRilRadioTechnology = 0;
+    protected int mNewRilRadioTechnology = 0;
 
     /**
      * By default, strength polling is enabled.  However, if we're
      * getting unsolicited signal strength updates from the radio, set
      * value to true and don't bother polling any more.
      */
-    protected boolean mDontPollSignalStrength = false;
+    protected boolean dontPollSignalStrength = false;
 
     protected RegistrantList mRoamingOnRegistrants = new RegistrantList();
     protected RegistrantList mRoamingOffRegistrants = new RegistrantList();
     protected RegistrantList mAttachedRegistrants = new RegistrantList();
     protected RegistrantList mDetachedRegistrants = new RegistrantList();
-    protected RegistrantList mDataRegStateOrRatChangedRegistrants = new RegistrantList();
     protected RegistrantList mNetworkAttachedRegistrants = new RegistrantList();
     protected RegistrantList mPsRestrictEnabledRegistrants = new RegistrantList();
     protected RegistrantList mPsRestrictDisabledRegistrants = new RegistrantList();
@@ -108,6 +100,8 @@ public abstract class ServiceStateTracker extends Handler {
     /* Radio power off pending flag and tag counter */
     private boolean mPendingRadioPowerOffAfterDataOff = false;
     private int mPendingRadioPowerOffAfterDataOffTag = 0;
+
+    protected  static final boolean DBG = true;
 
     /** Signal strength poll rate. */
     protected static final int POLL_PERIOD_MILLIS = 20 * 1000;
@@ -157,8 +151,6 @@ public abstract class ServiceStateTracker extends Handler {
     protected static final int EVENT_CDMA_PRL_VERSION_CHANGED          = 40;
     protected static final int EVENT_RADIO_ON                          = 41;
     protected static final int EVENT_ICC_CHANGED                       = 42;
-    protected static final int EVENT_GET_CELL_INFO_LIST                = 43;
-    protected static final int EVENT_UNSOL_CELL_INFO_LIST              = 44;
 
     protected static final String TIMEZONE_PROPERTY = "persist.sys.timezone";
 
@@ -191,11 +183,6 @@ public abstract class ServiceStateTracker extends Handler {
         "tg", // Togo
     };
 
-    private class CellInfoResult {
-        List<CellInfo> list;
-        Object lockObj = new Object();
-    }
-
     /** Reason for registration denial. */
     protected static final String REGISTRATION_DENIED_GEN  = "General";
     protected static final String REGISTRATION_DENIED_AUTH = "Authentication Failure";
@@ -203,22 +190,14 @@ public abstract class ServiceStateTracker extends Handler {
     protected ServiceStateTracker(PhoneBase phoneBase, CommandsInterface ci, CellInfo cellInfo) {
         mPhoneBase = phoneBase;
         mCellInfo = cellInfo;
-        mCi = ci;
-        mVoiceCapable = mPhoneBase.getContext().getResources().getBoolean(
-                com.android.internal.R.bool.config_voice_capable);
+        cm = ci;
         mUiccController = UiccController.getInstance();
         mUiccController.registerForIccChanged(this, EVENT_ICC_CHANGED, null);
-        mCi.setOnSignalStrengthUpdate(this, EVENT_SIGNAL_STRENGTH_UPDATE, null);
-        mCi.registerForCellInfoList(this, EVENT_UNSOL_CELL_INFO_LIST, null);
-
-        mPhoneBase.setSystemProperty(TelephonyProperties.PROPERTY_DATA_NETWORK_TYPE,
-            ServiceState.rilRadioTechnologyToString(ServiceState.RIL_RADIO_TECHNOLOGY_UNKNOWN));
+        cm.setOnSignalStrengthUpdate(this, EVENT_SIGNAL_STRENGTH_UPDATE, null);
     }
 
     public void dispose() {
-        mCi.unSetOnSignalStrengthUpdate(this);
-        mUiccController.unregisterForIccChanged(this);
-        mCi.unregisterForCellInfoList(this);
+        cm.unSetOnSignalStrengthUpdate(this);
     }
 
     public boolean getDesiredPowerState() {
@@ -243,39 +222,6 @@ public abstract class ServiceStateTracker extends Handler {
     }
 
     /**
-     * Notify all mDataConnectionRatChangeRegistrants using an
-     * AsyncResult in msg.obj where AsyncResult#result contains the
-     * new RAT as an Integer Object.
-     */
-    protected void notifyDataRegStateRilRadioTechnologyChanged() {
-        int rat = mSS.getRilDataRadioTechnology();
-        int drs = mSS.getDataRegState();
-        if (DBG) log("notifyDataRegStateRilRadioTechnologyChanged: drs=" + drs + " rat=" + rat);
-        mPhoneBase.setSystemProperty(TelephonyProperties.PROPERTY_DATA_NETWORK_TYPE,
-                ServiceState.rilRadioTechnologyToString(rat));
-        mDataRegStateOrRatChangedRegistrants.notifyResult(new Pair<Integer, Integer>(drs, rat));
-    }
-
-    /**
-     * Some operators have been known to report registration failure
-     * data only devices, to fix that use DataRegState.
-     */
-    protected void useDataRegStateForDataOnlyDevices() {
-        if (mVoiceCapable == false) {
-            if (DBG) {
-                log("useDataRegStateForDataOnlyDevice: VoiceRegState=" + mNewSS.getVoiceRegState()
-                    + " DataRegState=" + mNewSS.getDataRegState());
-            }
-            // TODO: Consider not lying and instead have callers know the difference. 
-            mNewSS.setVoiceRegState(mNewSS.getDataRegState());
-        }
-    }
-
-    protected void updatePhoneObject() {
-        mPhoneBase.updatePhoneObject(mSS.getRilVoiceRadioTechnology());
-    }
-
-    /**
      * Registration point for combined roaming on
      * combined roaming is true when roaming is true and ONS differs SPN
      *
@@ -287,7 +233,7 @@ public abstract class ServiceStateTracker extends Handler {
         Registrant r = new Registrant(h, what, obj);
         mRoamingOnRegistrants.add(r);
 
-        if (mSS.getRoaming()) {
+        if (ss.getRoaming()) {
             r.notifyRegistrant();
         }
     }
@@ -308,7 +254,7 @@ public abstract class ServiceStateTracker extends Handler {
         Registrant r = new Registrant(h, what, obj);
         mRoamingOffRegistrants.add(r);
 
-        if (!mSS.getRoaming()) {
+        if (!ss.getRoaming()) {
             r.notifyRegistrant();
         }
     }
@@ -327,7 +273,7 @@ public abstract class ServiceStateTracker extends Handler {
      * on failure.
      */
     public void reRegisterNetwork(Message onComplete) {
-        mCi.getPreferredNetworkType(
+        cm.getPreferredNetworkType(
                 obtainMessage(EVENT_GET_PREFERRED_NETWORK_TYPE, onComplete));
     }
 
@@ -354,26 +300,26 @@ public abstract class ServiceStateTracker extends Handler {
     public void enableSingleLocationUpdate() {
         if (mWantSingleLocationUpdate || mWantContinuousLocationUpdates) return;
         mWantSingleLocationUpdate = true;
-        mCi.setLocationUpdates(true, obtainMessage(EVENT_LOCATION_UPDATES_ENABLED));
+        cm.setLocationUpdates(true, obtainMessage(EVENT_LOCATION_UPDATES_ENABLED));
     }
 
     public void enableLocationUpdates() {
         if (mWantSingleLocationUpdate || mWantContinuousLocationUpdates) return;
         mWantContinuousLocationUpdates = true;
-        mCi.setLocationUpdates(true, obtainMessage(EVENT_LOCATION_UPDATES_ENABLED));
+        cm.setLocationUpdates(true, obtainMessage(EVENT_LOCATION_UPDATES_ENABLED));
     }
 
     protected void disableSingleLocationUpdate() {
         mWantSingleLocationUpdate = false;
         if (!mWantSingleLocationUpdate && !mWantContinuousLocationUpdates) {
-            mCi.setLocationUpdates(false, null);
+            cm.setLocationUpdates(false, null);
         }
     }
 
     public void disableLocationUpdates() {
         mWantContinuousLocationUpdates = false;
         if (!mWantSingleLocationUpdate && !mWantContinuousLocationUpdates) {
-            mCi.setLocationUpdates(false, null);
+            cm.setLocationUpdates(false, null);
         }
     }
 
@@ -398,45 +344,6 @@ public abstract class ServiceStateTracker extends Handler {
             case EVENT_ICC_CHANGED:
                 onUpdateIccAvailability();
                 break;
-
-            case EVENT_GET_CELL_INFO_LIST: {
-                AsyncResult ar = (AsyncResult) msg.obj;
-                CellInfoResult result = (CellInfoResult) ar.userObj;
-                synchronized(result.lockObj) {
-                    if (ar.exception != null) {
-                        log("EVENT_GET_CELL_INFO_LIST: error ret null, e=" + ar.exception);
-                        result.list = null;
-                    } else {
-                        result.list = (List<CellInfo>) ar.result;
-
-                        if (VDBG) {
-                            log("EVENT_GET_CELL_INFO_LIST: size=" + result.list.size()
-                                    + " list=" + result.list);
-                        }
-                    }
-                    mLastCellInfoListTime = SystemClock.elapsedRealtime();
-                    mLastCellInfoList = result.list;
-                    result.lockObj.notify();
-                }
-                break;
-            }
-
-            case EVENT_UNSOL_CELL_INFO_LIST: {
-                AsyncResult ar = (AsyncResult) msg.obj;
-                if (ar.exception != null) {
-                    log("EVENT_UNSOL_CELL_INFO_LIST: error ignoring, e=" + ar.exception);
-                } else {
-                    List<CellInfo> list = (List<CellInfo>) ar.result;
-                    if (DBG) {
-                        log("EVENT_UNSOL_CELL_INFO_LIST: size=" + list.size()
-                                + " list=" + list);
-                    }
-                    mLastCellInfoListTime = SystemClock.elapsedRealtime();
-                    mLastCellInfoList = list;
-                    mPhoneBase.notifyCellInfo(list);
-                }
-                break;
-            }
 
             default:
                 log("Unhandled message with number: " + msg.what);
@@ -492,24 +399,6 @@ public abstract class ServiceStateTracker extends Handler {
     }
 
     /**
-     * Registration for DataConnection RIL Data Radio Technology changing. The
-     * new radio technology will be returned AsyncResult#result as an Integer Object.
-     * The AsyncResult will be in the notification Message#obj.
-     *
-     * @param h handler to notify
-     * @param what what code of message when delivered
-     * @param obj placed in Message.obj
-     */
-    public void registerForDataRegStateOrRatChanged(Handler h, int what, Object obj) {
-        Registrant r = new Registrant(h, what, obj);
-        mDataRegStateOrRatChangedRegistrants.add(r);
-        notifyDataRegStateRilRadioTechnologyChanged();
-    }
-    public void unregisterForDataRegStateOrRatChanged(Handler h) {
-        mDataRegStateOrRatChangedRegistrants.remove(h);
-    }
-
-    /**
      * Registration point for transition into network attached.
      * @param h handler to notify
      * @param what what code of message when delivered
@@ -519,7 +408,7 @@ public abstract class ServiceStateTracker extends Handler {
         Registrant r = new Registrant(h, what, obj);
 
         mNetworkAttachedRegistrants.add(r);
-        if (mSS.getVoiceRegState() == ServiceState.STATE_IN_SERVICE) {
+        if (ss.getState() == ServiceState.STATE_IN_SERVICE) {
             r.notifyRegistrant();
         }
     }
@@ -570,7 +459,7 @@ public abstract class ServiceStateTracker extends Handler {
      *
      * Hang up the existing voice calls to decrease call drop rate.
      */
-    public void powerOffRadioSafely(DcTrackerBase dcTracker) {
+    public void powerOffRadioSafely(DataConnectionTracker dcTracker) {
         synchronized (this) {
             if (!mPendingRadioPowerOffAfterDataOff) {
                 // To minimize race conditions we call cleanUpAllConnections on
@@ -647,7 +536,7 @@ public abstract class ServiceStateTracker extends Handler {
     /** Cancel a pending (if any) pollState() operation */
     protected void cancelPollState() {
         // This will effectively cancel the rest of the poll requests.
-        mPollingContext = new int[1];
+        pollingContext = new int[1];
     }
 
     /**
@@ -711,44 +600,7 @@ public abstract class ServiceStateTracker extends Handler {
      * @return all available cell information or null if none.
      */
     public List<CellInfo> getAllCellInfo() {
-        CellInfoResult result = new CellInfoResult();
-        if (VDBG) log("SST.getAllCellInfo(): E");
-        int ver = mCi.getRilVersion();
-        if (ver >= 8) {
-            if (isCallerOnDifferentThread()) {
-                if ((SystemClock.elapsedRealtime() - mLastCellInfoListTime)
-                        > LAST_CELL_INFO_LIST_MAX_AGE_MS) {
-                    Message msg = obtainMessage(EVENT_GET_CELL_INFO_LIST, result);
-                    synchronized(result.lockObj) {
-                        mCi.getCellInfoList(msg);
-                        try {
-                            result.lockObj.wait();
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                            result.list = null;
-                        }
-                    }
-                } else {
-                    if (DBG) log("SST.getAllCellInfo(): return last, back to back calls");
-                    result.list = mLastCellInfoList;
-                }
-            } else {
-                if (DBG) log("SST.getAllCellInfo(): return last, same thread can't block");
-                result.list = mLastCellInfoList;
-            }
-        } else {
-            if (DBG) log("SST.getAllCellInfo(): not implemented");
-            result.list = null;
-        }
-        if (DBG) {
-            if (result.list != null) {
-                log("SST.getAllCellInfo(): X size=" + result.list.size()
-                        + " list=" + result.list);
-            } else {
-                log("SST.getAllCellInfo(): X size=0 list=null");
-            }
-        }
-        return result.list;
+        return null;
     }
 
     /**
@@ -762,13 +614,15 @@ public abstract class ServiceStateTracker extends Handler {
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("ServiceStateTracker:");
-        pw.println(" mSS=" + mSS);
-        pw.println(" mNewSS=" + mNewSS);
+        pw.println(" ss=" + ss);
+        pw.println(" newSS=" + newSS);
         pw.println(" mCellInfo=" + mCellInfo);
         pw.println(" mRestrictedState=" + mRestrictedState);
-        pw.println(" mPollingContext=" + mPollingContext);
+        pw.println(" pollingContext=" + pollingContext);
         pw.println(" mDesiredPowerState=" + mDesiredPowerState);
-        pw.println(" mDontPollSignalStrength=" + mDontPollSignalStrength);
+        pw.println(" mRilRadioTechnology=" + mRilRadioTechnology);
+        pw.println(" mNewRilRadioTechnology=" + mNewRilRadioTechnology);
+        pw.println(" dontPollSignalStrength=" + dontPollSignalStrength);
         pw.println(" mPendingRadioPowerOffAfterDataOff=" + mPendingRadioPowerOffAfterDataOff);
         pw.println(" mPendingRadioPowerOffAfterDataOffTag=" + mPendingRadioPowerOffAfterDataOffTag);
     }
@@ -785,20 +639,6 @@ public abstract class ServiceStateTracker extends Handler {
         if (Thread.currentThread() != getLooper().getThread()) {
             throw new RuntimeException(
                     "ServiceStateTracker must be used from within one thread");
-        }
-    }
-
-    protected boolean isCallerOnDifferentThread() {
-        boolean value = Thread.currentThread() != getLooper().getThread();
-        if (VDBG) log("isCallerOnDifferentThread: " + value);
-        return value;
-    }
-
-    protected void updateCarrierMccMncConfiguration(String newOp, String oldOp, Context context) {
-        // if we have a change in operator, notify wifi (even to/from none)
-        if (((newOp == null) && (TextUtils.isEmpty(oldOp) == false)) ||
-                ((newOp != null) && (newOp.equals(oldOp) == false))) {
-            MccTable.updateMccMncConfiguration(context, newOp, true);
         }
     }
 }

@@ -20,12 +20,11 @@ import android.content.Context;
 import android.os.AsyncResult;
 import android.os.Message;
 import android.os.SystemClock;
-import android.telephony.Rlog;
+import android.util.Log;
 
 import com.android.internal.telephony.BaseCommands;
+import com.android.internal.telephony.IccIoResult;
 import com.android.internal.telephony.UUSInfo;
-import com.android.internal.telephony.uicc.IccIoResult;
-import com.android.internal.telephony.cdma.CdmaSmsBroadcastConfigInfo;
 
 import junit.framework.Assert;
 
@@ -106,7 +105,7 @@ class UsimDataDownloadCommands extends BaseCommands {
     @Override
     public synchronized void acknowledgeLastIncomingGsmSms(boolean success, int cause,
             Message response) {
-        Rlog.d(TAG, "acknowledgeLastIncomingGsmSms: success=" + success + ", cause=" + cause);
+        Log.d(TAG, "acknowledgeLastIncomingGsmSms: success=" + success + ", cause=" + cause);
         Assert.assertTrue("unexpected call to acknowledge SMS", mExpectingAcknowledgeGsmSms);
         Assert.assertEquals(mExpectingAcknowledgeGsmSmsSuccess, success);
         Assert.assertEquals(mExpectingAcknowledgeGsmSmsFailureCause, cause);
@@ -121,7 +120,7 @@ class UsimDataDownloadCommands extends BaseCommands {
     @Override
     public synchronized void acknowledgeIncomingGsmSmsWithPdu(boolean success, String ackPdu,
             Message response) {
-        Rlog.d(TAG, "acknowledgeLastIncomingGsmSmsWithPdu: success=" + success
+        Log.d(TAG, "acknowledgeLastIncomingGsmSmsWithPdu: success=" + success
                 + ", ackPDU= " + ackPdu);
         Assert.assertTrue("unexpected call to acknowledge SMS", mExpectingAcknowledgeGsmSms);
         Assert.assertEquals(mExpectingAcknowledgeGsmSmsSuccess, success);
@@ -141,7 +140,7 @@ class UsimDataDownloadCommands extends BaseCommands {
         for (int i = 0; i < contents.length(); i += 2) {
             builder.append(contents.charAt(i)).append(contents.charAt(i+1)).append(' ');
         }
-        Rlog.d(TAG, "sendEnvelopeWithStatus: " + builder.toString());
+        Log.d(TAG, "sendEnvelopeWithStatus: " + builder.toString());
 
         Assert.assertTrue("unexpected call to send envelope", mExpectingSendEnvelope);
         Assert.assertEquals(mExpectingSendEnvelopeContents, contents);
@@ -355,16 +354,6 @@ class UsimDataDownloadCommands extends BaseCommands {
     }
 
     @Override
-    public void sendImsGsmSms (String smscPDU, String pdu,
-            int retry, int messageRef, Message response) {
-    }
-
-    @Override
-    public void sendImsCdmaSms(byte[] pdu, int retry, int messageRef,
-            Message response) {
-    }
-
-    @Override
     public void deleteSmsOnSim(int index, Message response) {
     }
 
@@ -556,10 +545,6 @@ class UsimDataDownloadCommands extends BaseCommands {
     }
 
     @Override
-    public void getImsRegistrationState (Message result) {
-    }
-
-    @Override
     public void sendCDMAFeatureCode(String FeatureCode, Message response) {
     }
 
@@ -605,7 +590,7 @@ class UsimDataDownloadCommands extends BaseCommands {
     }
 
     @Override
-    public void setCdmaBroadcastConfig(CdmaSmsBroadcastConfigInfo[] configs, Message response) {
+    public void setCdmaBroadcastConfig(int[] configValuesArray, Message result) {
     }
 
     @Override
@@ -626,14 +611,6 @@ class UsimDataDownloadCommands extends BaseCommands {
 
     @Override
     public void getVoiceRadioTechnology(Message response) {
-    }
-
-    @Override
-    public void getCellInfoList(Message result) {
-    }
-
-    @Override
-    public void setCellInfoListRate(int rateInMillis, Message response) {
     }
 
     @Override

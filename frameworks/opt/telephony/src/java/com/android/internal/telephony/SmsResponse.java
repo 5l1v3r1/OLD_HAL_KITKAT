@@ -23,26 +23,25 @@ package com.android.internal.telephony;
  */
 public class SmsResponse {
     /** Message reference of the just-sent SMS. */
-    int mMessageRef;
+    int messageRef;
     /** ackPdu for the just-sent SMS. */
-    String mAckPdu;
+    String ackPdu;
     /**
      * errorCode: See 3GPP 27.005, 3.2.5 for GSM/UMTS,
      * 3GPP2 N.S0005 (IS-41C) Table 171 for CDMA, -1 if unknown or not applicable.
      */
-    int mErrorCode;
+    int errorCode;
 
     public SmsResponse(int messageRef, String ackPdu, int errorCode) {
-        mMessageRef = messageRef;
-        mAckPdu = ackPdu;
-        mErrorCode = errorCode;
+        this.messageRef = messageRef;
+        this.ackPdu = ackPdu;
+        this.errorCode = errorCode;
     }
 
-    @Override
     public String toString() {
-        String ret = "{ mMessageRef = " + mMessageRef
-                        + ", mErrorCode = " + mErrorCode
-                        + ", mAckPdu = " + mAckPdu
+        String ret = "{ messageRef = " + messageRef
+                        + ", errorCode = " + errorCode
+                        + ", ackPdu = " + ackPdu
                         + "}";
         return ret;
     }

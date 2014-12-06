@@ -16,8 +16,10 @@
 
 package android.telephony;
 
+import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.telephony.gsm.GsmCellLocation;
 
 /**
  * Represents the location and geographical scope of a cell broadcast message.

@@ -25,62 +25,63 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.Registrant;
 import android.os.SystemClock;
-import android.telephony.Rlog;
+import android.os.SystemProperties;
+import android.util.Log;
 import android.text.TextUtils;
 
 import android.telephony.PhoneNumberUtils;
 import android.telephony.ServiceState;
 
-import com.android.internal.telephony.uicc.UiccCardApplication;
+import com.android.internal.telephony.IccCardApplicationStatus.AppState;
+import com.android.internal.telephony.TelephonyProperties;
+import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.uicc.UiccController;
-import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppState;
 
 /**
  * {@hide}
  */
 public class CdmaConnection extends Connection {
-    static final String LOG_TAG = "CdmaConnection";
-    private static final boolean VDBG = false;
+    static final String LOG_TAG = "CDMA";
 
     //***** Instance Variables
 
-    CdmaCallTracker mOwner;
-    CdmaCall mParent;
+    CdmaCallTracker owner;
+    CdmaCall parent;
 
 
-    String mAddress;             // MAY BE NULL!!!
-    String mDialString;          // outgoing calls only
-    String mPostDialString;      // outgoing calls only
-    boolean mIsIncoming;
-    boolean mDisconnected;
-    int mIndex;          // index in CdmaCallTracker.connections[], -1 if unassigned
+    String address;             // MAY BE NULL!!!
+    String dialString;          // outgoing calls only
+    String postDialString;      // outgoing calls only
+    boolean isIncoming;
+    boolean disconnected;
+    int index;          // index in CdmaCallTracker.connections[], -1 if unassigned
 
     /*
      * These time/timespan values are based on System.currentTimeMillis(),
      * i.e., "wall clock" time.
      */
-    long mCreateTime;
-    long mConnectTime;
-    long mDisconnectTime;
+    long createTime;
+    long connectTime;
+    long disconnectTime;
 
     /*
      * These time/timespan values are based on SystemClock.elapsedRealTime(),
      * i.e., time since boot.  They are appropriate for comparison and
      * calculating deltas.
      */
-    long mConnectTimeReal;
-    long mDuration;
-    long mHoldingStartTime;  // The time when the Connection last transitioned
+    long connectTimeReal;
+    long duration;
+    long holdingStartTime;  // The time when the Connection last transitioned
                             // into HOLDING
 
-    int mNextPostDialChar;       // index into postDialString
+    int nextPostDialChar;       // index into postDialString
 
-    DisconnectCause mCause = DisconnectCause.NOT_DISCONNECTED;
-    PostDialState mPostDialState = PostDialState.NOT_STARTED;
-    int mNumberPresentation = PhoneConstants.PRESENTATION_ALLOWED;
+    DisconnectCause cause = DisconnectCause.NOT_DISCONNECTED;
+    PostDialState postDialState = PostDialState.NOT_STARTED;
+    int numberPresentation = PhoneConstants.PRESENTATION_ALLOWED;
 
 
-    Handler mHandler;
+    Handler h;
 
     private PowerManager.WakeLock mPartialWakeLock;
 
@@ -99,7 +100,6 @@ public class CdmaConnection extends Connection {
     class MyHandler extends Handler {
         MyHandler(Looper l) {super(l);}
 
-        @Override
         public void
         handleMessage(Message msg) {
 
@@ -124,21 +124,21 @@ public class CdmaConnection extends Connection {
         createWakeLock(context);
         acquireWakeLock();
 
-        mOwner = ct;
-        mHandler = new MyHandler(mOwner.getLooper());
+        owner = ct;
+        h = new MyHandler(owner.getLooper());
 
-        mAddress = dc.number;
+        address = dc.number;
 
-        mIsIncoming = dc.isMT;
-        mCreateTime = System.currentTimeMillis();
-        mCnapName = dc.name;
-        mCnapNamePresentation = dc.namePresentation;
-        mNumberPresentation = dc.numberPresentation;
+        isIncoming = dc.isMT;
+        createTime = System.currentTimeMillis();
+        cnapName = dc.name;
+        cnapNamePresentation = dc.namePresentation;
+        numberPresentation = dc.numberPresentation;
 
-        mIndex = index;
+        this.index = index;
 
-        mParent = parentFromDCState (dc.state);
-        mParent.attach(this, dc);
+        parent = parentFromDCState (dc.state);
+        parent.attach(this, dc);
     }
 
     /** This is an MO call/three way call, created when dialing */
@@ -147,30 +147,30 @@ public class CdmaConnection extends Connection {
         createWakeLock(context);
         acquireWakeLock();
 
-        mOwner = ct;
-        mHandler = new MyHandler(mOwner.getLooper());
+        owner = ct;
+        h = new MyHandler(owner.getLooper());
 
-        mDialString = dialString;
-        Rlog.d(LOG_TAG, "[CDMAConn] CdmaConnection: dialString=" + dialString);
+        this.dialString = dialString;
+        Log.d(LOG_TAG, "[CDMAConn] CdmaConnection: dialString=" + dialString);
         dialString = formatDialString(dialString);
-        Rlog.d(LOG_TAG, "[CDMAConn] CdmaConnection:formated dialString=" + dialString);
+        Log.d(LOG_TAG, "[CDMAConn] CdmaConnection:formated dialString=" + dialString);
 
-        mAddress = PhoneNumberUtils.extractNetworkPortionAlt(dialString);
-        mPostDialString = PhoneNumberUtils.extractPostDialPortion(dialString);
+        this.address = PhoneNumberUtils.extractNetworkPortionAlt(dialString);
+        this.postDialString = PhoneNumberUtils.extractPostDialPortion(dialString);
 
-        mIndex = -1;
+        index = -1;
 
-        mIsIncoming = false;
-        mCnapName = null;
-        mCnapNamePresentation = PhoneConstants.PRESENTATION_ALLOWED;
-        mNumberPresentation = PhoneConstants.PRESENTATION_ALLOWED;
-        mCreateTime = System.currentTimeMillis();
+        isIncoming = false;
+        cnapName = null;
+        cnapNamePresentation = PhoneConstants.PRESENTATION_ALLOWED;
+        numberPresentation = PhoneConstants.PRESENTATION_ALLOWED;
+        createTime = System.currentTimeMillis();
 
         if (parent != null) {
-            mParent = parent;
+            this.parent = parent;
 
             //for the three way call case, not change parent state
-            if (parent.mState == CdmaCall.State.ACTIVE) {
+            if (parent.state == CdmaCall.State.ACTIVE) {
                 parent.attachFake(this, CdmaCall.State.ACTIVE);
             } else {
                 parent.attachFake(this, CdmaCall.State.DIALING);
@@ -184,17 +184,17 @@ public class CdmaConnection extends Connection {
         createWakeLock(context);
         acquireWakeLock();
 
-        mOwner = ct;
-        mHandler = new MyHandler(mOwner.getLooper());
-        mAddress = cw.number;
-        mNumberPresentation = cw.numberPresentation;
-        mCnapName = cw.name;
-        mCnapNamePresentation = cw.namePresentation;
-        mIndex = -1;
-        mIsIncoming = true;
-        mCreateTime = System.currentTimeMillis();
-        mConnectTime = 0;
-        mParent = parent;
+        owner = ct;
+        h = new MyHandler(owner.getLooper());
+        address = cw.number;
+        numberPresentation = cw.numberPresentation;
+        cnapName = cw.name;
+        cnapNamePresentation = cw.namePresentation;
+        index = -1;
+        isIncoming = true;
+        createTime = System.currentTimeMillis();
+        connectTime = 0;
+        this.parent = parent;
         parent.attachFake(this, CdmaCall.State.WAITING);
     }
 
@@ -213,114 +213,99 @@ public class CdmaConnection extends Connection {
         //
         // We assume we know when MO calls are created (since we created them)
         // and therefore don't need to compare the phone number anyway.
-        if (! (mIsIncoming || c.isMT)) return true;
+        if (! (isIncoming || c.isMT)) return true;
 
         // ... but we can compare phone numbers on MT calls, and we have
         // no control over when they begin, so we might as well
 
         String cAddress = PhoneNumberUtils.stringFromStringAndTOA(c.number, c.TOA);
-        return mIsIncoming == c.isMT && equalsHandlesNulls(mAddress, cAddress);
+        return isIncoming == c.isMT && equalsHandlesNulls(address, cAddress);
     }
 
 
-    @Override
     public String getOrigDialString(){
-        return mDialString;
+        return dialString;
     }
 
-    @Override
     public String getAddress() {
-        return mAddress;
+        return address;
     }
 
-    @Override
     public CdmaCall getCall() {
-        return mParent;
+        return parent;
     }
 
-    @Override
     public long getCreateTime() {
-        return mCreateTime;
+        return createTime;
     }
 
-    @Override
     public long getConnectTime() {
-        return mConnectTime;
+        return connectTime;
     }
 
-    @Override
     public long getDisconnectTime() {
-        return mDisconnectTime;
+        return disconnectTime;
     }
 
-    @Override
     public long getDurationMillis() {
-        if (mConnectTimeReal == 0) {
+        if (connectTimeReal == 0) {
             return 0;
-        } else if (mDuration == 0) {
-            return SystemClock.elapsedRealtime() - mConnectTimeReal;
+        } else if (duration == 0) {
+            return SystemClock.elapsedRealtime() - connectTimeReal;
         } else {
-            return mDuration;
+            return duration;
         }
     }
 
-    @Override
     public long getHoldDurationMillis() {
         if (getState() != CdmaCall.State.HOLDING) {
             // If not holding, return 0
             return 0;
         } else {
-            return SystemClock.elapsedRealtime() - mHoldingStartTime;
+            return SystemClock.elapsedRealtime() - holdingStartTime;
         }
     }
 
-    @Override
     public DisconnectCause getDisconnectCause() {
-        return mCause;
+        return cause;
     }
 
-    @Override
     public boolean isIncoming() {
-        return mIsIncoming;
+        return isIncoming;
     }
 
-    @Override
     public CdmaCall.State getState() {
-        if (mDisconnected) {
+        if (disconnected) {
             return CdmaCall.State.DISCONNECTED;
         } else {
             return super.getState();
         }
     }
 
-    @Override
     public void hangup() throws CallStateException {
-        if (!mDisconnected) {
-            mOwner.hangup(this);
+        if (!disconnected) {
+            owner.hangup(this);
         } else {
             throw new CallStateException ("disconnected");
         }
     }
 
-    @Override
     public void separate() throws CallStateException {
-        if (!mDisconnected) {
-            mOwner.separate(this);
+        if (!disconnected) {
+            owner.separate(this);
         } else {
             throw new CallStateException ("disconnected");
         }
     }
 
-    @Override
     public PostDialState getPostDialState() {
-        return mPostDialState;
+        return postDialState;
     }
 
-    @Override
     public void proceedAfterWaitChar() {
-        if (mPostDialState != PostDialState.WAIT) {
-            Rlog.w(LOG_TAG, "CdmaConnection.proceedAfterWaitChar(): Expected "
-                + "getPostDialState() to be WAIT but was " + mPostDialState);
+        if (postDialState != PostDialState.WAIT) {
+            Log.w(LOG_TAG, "CdmaConnection.proceedAfterWaitChar(): Expected "
+                + "getPostDialState() to be WAIT but was " + postDialState);
             return;
         }
 
@@ -329,32 +314,53 @@ public class CdmaConnection extends Connection {
         processNextPostDialChar();
     }
 
-    @Override
     public void proceedAfterWildChar(String str) {
-        if (mPostDialState != PostDialState.WILD) {
-            Rlog.w(LOG_TAG, "CdmaConnection.proceedAfterWaitChar(): Expected "
-                + "getPostDialState() to be WILD but was " + mPostDialState);
+        if (postDialState != PostDialState.WILD) {
+            Log.w(LOG_TAG, "CdmaConnection.proceedAfterWaitChar(): Expected "
+                + "getPostDialState() to be WILD but was " + postDialState);
             return;
         }
 
         setPostDialState(PostDialState.STARTED);
 
-        // make a new postDialString, with the wild char replacement string
-        // at the beginning, followed by the remaining postDialString.
+        if (false) {
+            boolean playedTone = false;
+            int len = (str != null ? str.length() : 0);
 
-        StringBuilder buf = new StringBuilder(str);
-        buf.append(mPostDialString.substring(mNextPostDialChar));
-        mPostDialString = buf.toString();
-        mNextPostDialChar = 0;
-        if (Phone.DEBUG_PHONE) {
-            log("proceedAfterWildChar: new postDialString is " +
-                    mPostDialString);
+            for (int i=0; i<len; i++) {
+                char c = str.charAt(i);
+                Message msg = null;
+
+                if (i == len-1) {
+                    msg = h.obtainMessage(EVENT_DTMF_DONE);
+                }
+
+                if (PhoneNumberUtils.is12Key(c)) {
+                    owner.cm.sendDtmf(c, msg);
+                    playedTone = true;
+                }
+            }
+
+            if (!playedTone) {
+                processNextPostDialChar();
+            }
+        } else {
+            // make a new postDialString, with the wild char replacement string
+            // at the beginning, followed by the remaining postDialString.
+
+            StringBuilder buf = new StringBuilder(str);
+            buf.append(postDialString.substring(nextPostDialChar));
+            postDialString = buf.toString();
+            nextPostDialChar = 0;
+            if (Phone.DEBUG_PHONE) {
+                log("proceedAfterWildChar: new postDialString is " +
+                        postDialString);
+            }
+
+            processNextPostDialChar();
         }
-
-        processNextPostDialChar();
     }
 
-    @Override
     public void cancelPostDial() {
         setPostDialState(PostDialState.CANCELLED);
     }
@@ -366,7 +372,7 @@ public class CdmaConnection extends Connection {
      */
     void
     onHangupLocal() {
-        mCause = DisconnectCause.LOCAL;
+        cause = DisconnectCause.LOCAL;
     }
 
     DisconnectCause
@@ -410,12 +416,12 @@ public class CdmaConnection extends Connection {
             case CallFailCause.ERROR_UNSPECIFIED:
             case CallFailCause.NORMAL_CLEARING:
             default:
-                CDMAPhone phone = mOwner.mPhone;
+                CDMAPhone phone = owner.phone;
                 int serviceState = phone.getServiceState().getState();
-                UiccCardApplication app = UiccController
+                AppState uiccAppState = UiccController
                         .getInstance()
-                        .getUiccCardApplication(UiccController.APP_FAM_3GPP2);
-                AppState uiccAppState = (app != null) ? app.getState() : AppState.APPSTATE_UNKNOWN;
+                        .getUiccCardApplication(UiccController.APP_FAM_3GPP2)
+                        .getState();
                 if (serviceState == ServiceState.STATE_POWER_OFF) {
                     return DisconnectCause.POWER_OFF;
                 } else if (serviceState == ServiceState.STATE_OUT_OF_SERVICE
@@ -439,35 +445,34 @@ public class CdmaConnection extends Connection {
     }
 
     /** Called when the radio indicates the connection has been disconnected */
-    /*package*/ boolean
+    /*package*/ void
     onDisconnect(DisconnectCause cause) {
-        boolean changed = false;
+        this.cause = cause;
 
-        mCause = cause;
-
-        if (!mDisconnected) {
+        if (!disconnected) {
             doDisconnect();
-            if (VDBG) Rlog.d(LOG_TAG, "onDisconnect: cause=" + cause);
+            if (false) Log.d(LOG_TAG,
+                    "[CDMAConn] onDisconnect: cause=" + cause);
 
-            mOwner.mPhone.notifyDisconnect(this);
+            owner.phone.notifyDisconnect(this);
 
-            if (mParent != null) {
-                changed = mParent.connectionDisconnected(this);
+            if (parent != null) {
+                parent.connectionDisconnected(this);
             }
         }
         releaseWakeLock();
-        return changed;
     }
 
     /** Called when the call waiting connection has been hung up */
     /*package*/ void
     onLocalDisconnect() {
-        if (!mDisconnected) {
+        if (!disconnected) {
             doDisconnect();
-            if (VDBG) Rlog.d(LOG_TAG, "onLoalDisconnect" );
+            if (false) Log.d(LOG_TAG,
+                    "[CDMAConn] onLoalDisconnect" );
 
-            if (mParent != null) {
-                mParent.detach(this);
+            if (parent != null) {
+                parent.detach(this);
             }
         }
         releaseWakeLock();
@@ -483,39 +488,39 @@ public class CdmaConnection extends Connection {
 
         newParent = parentFromDCState(dc.state);
 
-        if (Phone.DEBUG_PHONE) log("parent= " +mParent +", newParent= " + newParent);
+        if (Phone.DEBUG_PHONE) log("parent= " +parent +", newParent= " + newParent);
 
-        if (!equalsHandlesNulls(mAddress, dc.number)) {
+        if (!equalsHandlesNulls(address, dc.number)) {
             if (Phone.DEBUG_PHONE) log("update: phone # changed!");
-            mAddress = dc.number;
+            address = dc.number;
             changed = true;
         }
 
         // A null cnapName should be the same as ""
         if (TextUtils.isEmpty(dc.name)) {
-            if (!TextUtils.isEmpty(mCnapName)) {
+            if (!TextUtils.isEmpty(cnapName)) {
                 changed = true;
-                mCnapName = "";
+                cnapName = "";
             }
-        } else if (!dc.name.equals(mCnapName)) {
+        } else if (!dc.name.equals(cnapName)) {
             changed = true;
-            mCnapName = dc.name;
+            cnapName = dc.name;
         }
 
-        if (Phone.DEBUG_PHONE) log("--dssds----"+mCnapName);
-        mCnapNamePresentation = dc.namePresentation;
-        mNumberPresentation = dc.numberPresentation;
+        if (Phone.DEBUG_PHONE) log("--dssds----"+cnapName);
+        cnapNamePresentation = dc.namePresentation;
+        numberPresentation = dc.numberPresentation;
 
-        if (newParent != mParent) {
-            if (mParent != null) {
-                mParent.detach(this);
+        if (newParent != parent) {
+            if (parent != null) {
+                parent.detach(this);
             }
             newParent.attach(this, dc);
-            mParent = newParent;
+            parent = newParent;
             changed = true;
         } else {
             boolean parentStateChange;
-            parentStateChange = mParent.update (this, dc);
+            parentStateChange = parent.update (this, dc);
             changed = changed || parentStateChange;
         }
 
@@ -548,20 +553,20 @@ public class CdmaConnection extends Connection {
      */
     void
     fakeHoldBeforeDial() {
-        if (mParent != null) {
-            mParent.detach(this);
+        if (parent != null) {
+            parent.detach(this);
         }
 
-        mParent = mOwner.mBackgroundCall;
-        mParent.attachFake(this, CdmaCall.State.HOLDING);
+        parent = owner.backgroundCall;
+        parent.attachFake(this, CdmaCall.State.HOLDING);
 
         onStartedHolding();
     }
 
     /*package*/ int
     getCDMAIndex() throws CallStateException {
-        if (mIndex >= 0) {
-            return mIndex + 1;
+        if (index >= 0) {
+            return index + 1;
         } else {
             throw new CallStateException ("CDMA connection index not assigned");
         }
@@ -572,17 +577,17 @@ public class CdmaConnection extends Connection {
      */
     void
     onConnectedInOrOut() {
-        mConnectTime = System.currentTimeMillis();
-        mConnectTimeReal = SystemClock.elapsedRealtime();
-        mDuration = 0;
+        connectTime = System.currentTimeMillis();
+        connectTimeReal = SystemClock.elapsedRealtime();
+        duration = 0;
 
         // bug #678474: incoming call interpreted as missed call, even though
         // it sounds like the user has picked up the call.
         if (Phone.DEBUG_PHONE) {
-            log("onConnectedInOrOut: connectTime=" + mConnectTime);
+            log("onConnectedInOrOut: connectTime=" + connectTime);
         }
 
-        if (!mIsIncoming) {
+        if (!isIncoming) {
             // outgoing calls only
             processNextPostDialChar();
         } else {
@@ -594,15 +599,15 @@ public class CdmaConnection extends Connection {
 
     private void
     doDisconnect() {
-       mIndex = -1;
-       mDisconnectTime = System.currentTimeMillis();
-       mDuration = SystemClock.elapsedRealtime() - mConnectTimeReal;
-       mDisconnected = true;
+       index = -1;
+       disconnectTime = System.currentTimeMillis();
+       duration = SystemClock.elapsedRealtime() - connectTimeReal;
+       disconnected = true;
     }
 
-    /*package*/ void
+    private void
     onStartedHolding() {
-        mHoldingStartTime = SystemClock.elapsedRealtime();
+        holdingStartTime = SystemClock.elapsedRealtime();
     }
     /**
      * Performs the appropriate action for a post-dial char, but does not
@@ -612,14 +617,14 @@ public class CdmaConnection extends Connection {
     private boolean
     processPostDialChar(char c) {
         if (PhoneNumberUtils.is12Key(c)) {
-            mOwner.mCi.sendDtmf(c, mHandler.obtainMessage(EVENT_DTMF_DONE));
+            owner.cm.sendDtmf(c, h.obtainMessage(EVENT_DTMF_DONE));
         } else if (c == PhoneNumberUtils.PAUSE) {
             setPostDialState(PostDialState.PAUSE);
 
             // Upon occurrences of the separator, the UE shall
             // pause again for 2 seconds before sending any
             // further DTMF digits.
-            mHandler.sendMessageDelayed(mHandler.obtainMessage(EVENT_PAUSE_DONE),
+            h.sendMessageDelayed(h.obtainMessage(EVENT_PAUSE_DONE),
                                             PAUSE_DELAY_MILLIS);
         } else if (c == PhoneNumberUtils.WAIT) {
             setPostDialState(PostDialState.WAIT);
@@ -632,16 +637,15 @@ public class CdmaConnection extends Connection {
         return true;
     }
 
-    @Override
     public String getRemainingPostDialString() {
-        if (mPostDialState == PostDialState.CANCELLED
-                || mPostDialState == PostDialState.COMPLETE
-                || mPostDialString == null
-                || mPostDialString.length() <= mNextPostDialChar) {
+        if (postDialState == PostDialState.CANCELLED
+                || postDialState == PostDialState.COMPLETE
+                || postDialString == null
+                || postDialString.length() <= nextPostDialChar) {
             return "";
         }
 
-        String subStr = mPostDialString.substring(mNextPostDialChar);
+        String subStr = postDialString.substring(nextPostDialChar);
         if (subStr != null) {
             int wIndex = subStr.indexOf(PhoneNumberUtils.WAIT);
             int pIndex = subStr.indexOf(PhoneNumberUtils.PAUSE);
@@ -661,7 +665,7 @@ public class CdmaConnection extends Connection {
                 oldParent.detach(this);
             }
             newParent.attachFake(this, CdmaCall.State.ACTIVE);
-            mParent = newParent;
+            parent = newParent;
         }
     }
 
@@ -675,7 +679,7 @@ public class CdmaConnection extends Connection {
          * and or onConnectedInOrOut.
          */
         if (mPartialWakeLock.isHeld()) {
-            Rlog.e(LOG_TAG, "[CdmaConn] UNEXPECTED; mPartialWakeLock is held when finalizing.");
+            Log.e(LOG_TAG, "[CdmaConn] UNEXPECTED; mPartialWakeLock is held when finalizing.");
         }
         releaseWakeLock();
     }
@@ -684,14 +688,14 @@ public class CdmaConnection extends Connection {
         char c = 0;
         Registrant postDialHandler;
 
-        if (mPostDialState == PostDialState.CANCELLED) {
+        if (postDialState == PostDialState.CANCELLED) {
             releaseWakeLock();
-            //Rlog.v("CDMA", "##### processNextPostDialChar: postDialState == CANCELLED, bail");
+            //Log.v("CDMA", "##### processNextPostDialChar: postDialState == CANCELLED, bail");
             return;
         }
 
-        if (mPostDialString == null ||
-                mPostDialString.length() <= mNextPostDialChar) {
+        if (postDialString == null ||
+                postDialString.length() <= nextPostDialChar) {
             setPostDialState(PostDialState.COMPLETE);
 
             // We were holding a wake lock until pause-dial was complete, so give it up now
@@ -704,27 +708,27 @@ public class CdmaConnection extends Connection {
 
             setPostDialState(PostDialState.STARTED);
 
-            c = mPostDialString.charAt(mNextPostDialChar++);
+            c = postDialString.charAt(nextPostDialChar++);
 
             isValid = processPostDialChar(c);
 
             if (!isValid) {
                 // Will call processNextPostDialChar
-                mHandler.obtainMessage(EVENT_NEXT_POST_DIAL).sendToTarget();
+                h.obtainMessage(EVENT_NEXT_POST_DIAL).sendToTarget();
                 // Don't notify application
-                Rlog.e("CDMA", "processNextPostDialChar: c=" + c + " isn't valid!");
+                Log.e("CDMA", "processNextPostDialChar: c=" + c + " isn't valid!");
                 return;
             }
         }
 
-        postDialHandler = mOwner.mPhone.mPostDialHandler;
+        postDialHandler = owner.phone.mPostDialHandler;
 
         Message notifyMessage;
 
         if (postDialHandler != null &&
                 (notifyMessage = postDialHandler.messageForRegistrant()) != null) {
             // The AsyncResult.result is the Connection object
-            PostDialState state = mPostDialState;
+            PostDialState state = postDialState;
             AsyncResult ar = AsyncResult.forMessage(notifyMessage);
             ar.result = this;
             ar.userObj = state;
@@ -742,9 +746,9 @@ public class CdmaConnection extends Connection {
      */
     private boolean
     isConnectingInOrOut() {
-        return mParent == null || mParent == mOwner.mRingingCall
-            || mParent.mState == CdmaCall.State.DIALING
-            || mParent.mState == CdmaCall.State.ALERTING;
+        return parent == null || parent == owner.ringingCall
+            || parent.state == CdmaCall.State.DIALING
+            || parent.state == CdmaCall.State.ALERTING;
     }
 
     private CdmaCall
@@ -753,16 +757,16 @@ public class CdmaConnection extends Connection {
             case ACTIVE:
             case DIALING:
             case ALERTING:
-                return mOwner.mForegroundCall;
+                return owner.foregroundCall;
             //break;
 
             case HOLDING:
-                return mOwner.mBackgroundCall;
+                return owner.backgroundCall;
             //break;
 
             case INCOMING:
             case WAITING:
-                return mOwner.mRingingCall;
+                return owner.ringingCall;
             //break;
 
             default:
@@ -781,18 +785,18 @@ public class CdmaConnection extends Connection {
                 s == PostDialState.PAUSE) {
             synchronized (mPartialWakeLock) {
                 if (mPartialWakeLock.isHeld()) {
-                    mHandler.removeMessages(EVENT_WAKE_LOCK_TIMEOUT);
+                    h.removeMessages(EVENT_WAKE_LOCK_TIMEOUT);
                 } else {
                     acquireWakeLock();
                 }
-                Message msg = mHandler.obtainMessage(EVENT_WAKE_LOCK_TIMEOUT);
-                mHandler.sendMessageDelayed(msg, WAKE_LOCK_TIMEOUT_MILLIS);
+                Message msg = h.obtainMessage(EVENT_WAKE_LOCK_TIMEOUT);
+                h.sendMessageDelayed(msg, WAKE_LOCK_TIMEOUT_MILLIS);
             }
         } else {
-            mHandler.removeMessages(EVENT_WAKE_LOCK_TIMEOUT);
+            h.removeMessages(EVENT_WAKE_LOCK_TIMEOUT);
             releaseWakeLock();
         }
-        mPostDialState = s;
+        postDialState = s;
     }
 
     private void createWakeLock(Context context) {
@@ -932,12 +936,12 @@ public class CdmaConnection extends Connection {
     }
 
     private void log(String msg) {
-        Rlog.d(LOG_TAG, "[CDMAConn] " + msg);
+        Log.d(LOG_TAG, "[CDMAConn] " + msg);
     }
 
     @Override
     public int getNumberPresentation() {
-        return mNumberPresentation;
+        return numberPresentation;
     }
 
     @Override

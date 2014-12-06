@@ -22,6 +22,7 @@ import com.android.internal.telephony.Connection;
 import com.android.internal.telephony.DriverCall;
 import com.android.internal.telephony.Phone;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -30,7 +31,8 @@ import java.util.List;
 class GsmCall extends Call {
     /*************************** Instance Variables **************************/
 
-    /*package*/ GsmCallTracker mOwner;
+    /*package*/ ArrayList<Connection> connections = new ArrayList<Connection>();
+    /*package*/ GsmCallTracker owner;
 
 
     /***************************** Class Methods *****************************/
@@ -52,7 +54,7 @@ class GsmCall extends Call {
     /****************************** Constructors *****************************/
     /*package*/
     GsmCall (GsmCallTracker owner) {
-        mOwner = owner;
+        this.owner = owner;
     }
 
     public void dispose() {
@@ -60,69 +62,64 @@ class GsmCall extends Call {
 
     /************************** Overridden from Call *************************/
 
-    @Override
     public List<Connection>
     getConnections() {
         // FIXME should return Collections.unmodifiableList();
-        return mConnections;
+        return connections;
     }
 
-    @Override
     public Phone
     getPhone() {
-        return mOwner.mPhone;
+        return owner.phone;
     }
 
-    @Override
     public boolean
     isMultiparty() {
-        return mConnections.size() > 1;
+        return connections.size() > 1;
     }
 
     /** Please note: if this is the foreground call and a
      *  background call exists, the background call will be resumed
      *  because an AT+CHLD=1 will be sent
      */
-    @Override
     public void
     hangup() throws CallStateException {
-        mOwner.hangup(this);
+        owner.hangup(this);
     }
 
-    @Override
     public String
     toString() {
-        return mState.toString();
+        return state.toString();
     }
 
     //***** Called from GsmConnection
 
     /*package*/ void
     attach(Connection conn, DriverCall dc) {
-        mConnections.add(conn);
+        connections.add(conn);
 
-        mState = stateFromDCState (dc.state);
+        state = stateFromDCState (dc.state);
     }
 
     /*package*/ void
     attachFake(Connection conn, State state) {
-        mConnections.add(conn);
+        connections.add(conn);
 
-        mState = state;
+        this.state = state;
     }
 
     /**
      * Called by GsmConnection when it has disconnected
      */
-    boolean
+    void
     connectionDisconnected(GsmConnection conn) {
-        if (mState != State.DISCONNECTED) {
+        if (state != State.DISCONNECTED) {
             /* If only disconnected connections remain, we are disconnected*/
 
             boolean hasOnlyDisconnectedConnections = true;
 
-            for (int i = 0, s = mConnections.size()  ; i < s; i ++) {
-                if (mConnections.get(i).getState()
+            for (int i = 0, s = connections.size()  ; i < s; i ++) {
+                if (connections.get(i).getState()
                     != State.DISCONNECTED
                 ) {
                     hasOnlyDisconnectedConnections = false;
@@ -131,20 +128,18 @@ class GsmCall extends Call {
             }
 
             if (hasOnlyDisconnectedConnections) {
-                mState = State.DISCONNECTED;
-                return true;
+                state = State.DISCONNECTED;
             }
         }
-
-        return false;
     }
+
 
     /*package*/ void
     detach(GsmConnection conn) {
-        mConnections.remove(conn);
+        connections.remove(conn);
 
-        if (mConnections.size() == 0) {
-            mState = State.IDLE;
+        if (connections.size() == 0) {
+            state = State.IDLE;
         }
     }
 
@@ -155,8 +150,8 @@ class GsmCall extends Call {
 
         newState = stateFromDCState(dc.state);
 
-        if (newState != mState) {
-            mState = newState;
+        if (newState != state) {
+            state = newState;
             changed = true;
         }
 
@@ -169,7 +164,7 @@ class GsmCall extends Call {
      */
     /*package*/ boolean
     isFull() {
-        return mConnections.size() == GsmCallTracker.MAX_CONNECTIONS_PER_CALL;
+        return connections.size() == GsmCallTracker.MAX_CONNECTIONS_PER_CALL;
     }
 
     //***** Called from GsmCallTracker
@@ -182,14 +177,14 @@ class GsmCall extends Call {
      */
     void
     onHangupLocal() {
-        for (int i = 0, s = mConnections.size()
+        for (int i = 0, s = connections.size()
                 ; i < s; i++
         ) {
-            GsmConnection cn = (GsmConnection)mConnections.get(i);
+            GsmConnection cn = (GsmConnection)connections.get(i);
 
             cn.onHangupLocal();
         }
-        mState = State.DISCONNECTING;
+        state = State.DISCONNECTING;
     }
 
     /**
@@ -197,16 +192,16 @@ class GsmCall extends Call {
      */
     void
     clearDisconnected() {
-        for (int i = mConnections.size() - 1 ; i >= 0 ; i--) {
-            GsmConnection cn = (GsmConnection)mConnections.get(i);
+        for (int i = connections.size() - 1 ; i >= 0 ; i--) {
+            GsmConnection cn = (GsmConnection)connections.get(i);
 
             if (cn.getState() == State.DISCONNECTED) {
-                mConnections.remove(i);
+                connections.remove(i);
             }
         }
 
-        if (mConnections.size() == 0) {
-            mState = State.IDLE;
+        if (connections.size() == 0) {
+            state = State.IDLE;
         }
     }
 }

@@ -18,6 +18,9 @@ package com.android.internal.telephony.cdma;
 
 public class TtyIntent {
 
+    private static final String TAG = "TtyIntent";
+
+
     /** Event for TTY mode change */
 
     /**

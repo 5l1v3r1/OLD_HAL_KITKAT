@@ -21,15 +21,12 @@ import android.os.AsyncResult;
 import android.os.Handler;
 import android.os.Message;
 import android.provider.Telephony.Sms.Intents;
-import android.telephony.PhoneNumberUtils;
-import android.telephony.Rlog;
-import android.telephony.SmsManager;
+import android.util.Log;
 
 import com.android.internal.telephony.CommandsInterface;
+import com.android.internal.telephony.IccIoResult;
+import com.android.internal.telephony.IccUtils;
 import com.android.internal.telephony.cat.ComprehensionTlvTag;
-import com.android.internal.telephony.uicc.IccIoResult;
-import com.android.internal.telephony.uicc.IccUtils;
-import com.android.internal.telephony.uicc.UsimServiceTable;
 
 /**
  * Handler for SMS-PP data download messages.
@@ -53,45 +50,10 @@ public class UsimDataDownloadHandler extends Handler {
     /** Response to SMS-PP download envelope command. */
     private static final int EVENT_SEND_ENVELOPE_RESPONSE = 2;
 
-    /** Result of writing SM to UICC (when SMS-PP service is not available). */
-    private static final int EVENT_WRITE_SMS_COMPLETE = 3;
-
-    private final CommandsInterface mCi;
+    private final CommandsInterface mCI;
 
     public UsimDataDownloadHandler(CommandsInterface commandsInterface) {
-        mCi = commandsInterface;
-    }
-
-    /**
-     * Handle SMS-PP data download messages. Normally these are automatically handled by the
-     * radio, but we may have to deal with this type of SM arriving via the IMS stack. If the
-     * data download service is not enabled, try to write to the USIM as an SMS, and send the
-     * UICC response as the acknowledgment to the SMSC.
-     *
-     * @param ust the UsimServiceTable, to check if data download is enabled
-     * @param smsMessage the SMS message to process
-     * @return {@code Activity.RESULT_OK} on success; {@code RESULT_SMS_GENERIC_ERROR} on failure
-     */
-    int handleUsimDataDownload(UsimServiceTable ust, SmsMessage smsMessage) {
-        // If we receive an SMS-PP message before the UsimServiceTable has been loaded,
-        // assume that the data download service is not present. This is very unlikely to
-        // happen because the IMS connection will not be established until after the ISIM
-        // records have been loaded, after the USIM service table has been loaded.
-        if (ust != null && ust.isAvailable(
-                UsimServiceTable.UsimService.DATA_DL_VIA_SMS_PP)) {
-            Rlog.d(TAG, "Received SMS-PP data download, sending to UICC.");
-            return startDataDownload(smsMessage);
-        } else {
-            Rlog.d(TAG, "DATA_DL_VIA_SMS_PP service not available, storing message to UICC.");
-            String smsc = IccUtils.bytesToHexString(
-                    PhoneNumberUtils.networkPortionToCalledPartyBCDWithLength(
-                            smsMessage.getServiceCenterAddress()));
-            mCi.writeSmsToSim(SmsManager.STATUS_ON_ICC_UNREAD, smsc,
-                    IccUtils.bytesToHexString(smsMessage.getPdu()),
-                    obtainMessage(EVENT_WRITE_SMS_COMPLETE));
-            return Activity.RESULT_OK;  // acknowledge after response from write to USIM
-        }
-
+        mCI = commandsInterface;
     }
 
     /**
@@ -99,13 +61,13 @@ public class UsimDataDownloadHandler extends Handler {
      * thread than this Handler is running on.
      *
      * @param smsMessage the message to process
-     * @return {@code Activity.RESULT_OK} on success; {@code RESULT_SMS_GENERIC_ERROR} on failure
+     * @return Activity.RESULT_OK on success; Intents.RESULT_SMS_GENERIC_ERROR on failure
      */
     public int startDataDownload(SmsMessage smsMessage) {
         if (sendMessage(obtainMessage(EVENT_START_DATA_DOWNLOAD, smsMessage))) {
             return Activity.RESULT_OK;  // we will send SMS ACK/ERROR based on UICC response
         } else {
-            Rlog.e(TAG, "startDataDownload failed to send message to start data download.");
+            Log.e(TAG, "startDataDownload failed to send message to start data download.");
             return Intents.RESULT_SMS_GENERIC_ERROR;
         }
     }
@@ -160,13 +122,13 @@ public class UsimDataDownloadHandler extends Handler {
 
         // Verify that we calculated the payload size correctly.
         if (index != envelope.length) {
-            Rlog.e(TAG, "startDataDownload() calculated incorrect envelope length, aborting.");
+            Log.e(TAG, "startDataDownload() calculated incorrect envelope length, aborting.");
             acknowledgeSmsWithError(CommandsInterface.GSM_SMS_FAIL_CAUSE_UNSPECIFIED_ERROR);
             return;
         }
 
         String encodedEnvelope = IccUtils.bytesToHexString(envelope);
-        mCi.sendEnvelopeWithStatus(encodedEnvelope, obtainMessage(
+        mCI.sendEnvelopeWithStatus(encodedEnvelope, obtainMessage(
                 EVENT_SEND_ENVELOPE_RESPONSE, new int[]{ dcs, pid }));
     }
 
@@ -202,24 +164,24 @@ public class UsimDataDownloadHandler extends Handler {
 
         boolean success;
         if ((sw1 == 0x90 && sw2 == 0x00) || sw1 == 0x91) {
-            Rlog.d(TAG, "USIM data download succeeded: " + response.toString());
+            Log.d(TAG, "USIM data download succeeded: " + response.toString());
             success = true;
         } else if (sw1 == 0x93 && sw2 == 0x00) {
-            Rlog.e(TAG, "USIM data download failed: Toolkit busy");
+            Log.e(TAG, "USIM data download failed: Toolkit busy");
             acknowledgeSmsWithError(CommandsInterface.GSM_SMS_FAIL_CAUSE_USIM_APP_TOOLKIT_BUSY);
             return;
         } else if (sw1 == 0x62 || sw1 == 0x63) {
-            Rlog.e(TAG, "USIM data download failed: " + response.toString());
+            Log.e(TAG, "USIM data download failed: " + response.toString());
             success = false;
         } else {
-            Rlog.e(TAG, "Unexpected SW1/SW2 response from UICC: " + response.toString());
+            Log.e(TAG, "Unexpected SW1/SW2 response from UICC: " + response.toString());
             success = false;
         }
 
         byte[] responseBytes = response.payload;
         if (responseBytes == null || responseBytes.length == 0) {
             if (success) {
-                mCi.acknowledgeLastIncomingGsmSms(true, 0, null);
+                mCI.acknowledgeLastIncomingGsmSms(true, 0, null);
             } else {
                 acknowledgeSmsWithError(
                         CommandsInterface.GSM_SMS_FAIL_CAUSE_USIM_DATA_DOWNLOAD_ERROR);
@@ -253,12 +215,12 @@ public class UsimDataDownloadHandler extends Handler {
 
         System.arraycopy(responseBytes, 0, smsAckPdu, index, responseBytes.length);
 
-        mCi.acknowledgeIncomingGsmSmsWithPdu(success,
+        mCI.acknowledgeIncomingGsmSmsWithPdu(success,
                 IccUtils.bytesToHexString(smsAckPdu), null);
     }
 
     private void acknowledgeSmsWithError(int cause) {
-        mCi.acknowledgeLastIncomingGsmSms(false, cause, null);
+        mCI.acknowledgeLastIncomingGsmSms(false, cause, null);
     }
 
     /**
@@ -279,18 +241,16 @@ public class UsimDataDownloadHandler extends Handler {
      */
     @Override
     public void handleMessage(Message msg) {
-        AsyncResult ar;
-
         switch (msg.what) {
             case EVENT_START_DATA_DOWNLOAD:
                 handleDataDownload((SmsMessage) msg.obj);
                 break;
 
             case EVENT_SEND_ENVELOPE_RESPONSE:
-                ar = (AsyncResult) msg.obj;
+                AsyncResult ar = (AsyncResult) msg.obj;
 
                 if (ar.exception != null) {
-                    Rlog.e(TAG, "UICC Send Envelope failure, exception: " + ar.exception);
+                    Log.e(TAG, "UICC Send Envelope failure, exception: " + ar.exception);
                     acknowledgeSmsWithError(
                             CommandsInterface.GSM_SMS_FAIL_CAUSE_USIM_DATA_DOWNLOAD_ERROR);
                     return;
@@ -300,20 +260,8 @@ public class UsimDataDownloadHandler extends Handler {
                 sendSmsAckForEnvelopeResponse((IccIoResult) ar.result, dcsPid[0], dcsPid[1]);
                 break;
 
-            case EVENT_WRITE_SMS_COMPLETE:
-                ar = (AsyncResult) msg.obj;
-                if (ar.exception == null) {
-                    Rlog.d(TAG, "Successfully wrote SMS-PP message to UICC");
-                    mCi.acknowledgeLastIncomingGsmSms(true, 0, null);
-                } else {
-                    Rlog.d(TAG, "Failed to write SMS-PP message to UICC", ar.exception);
-                    mCi.acknowledgeLastIncomingGsmSms(false,
-                            CommandsInterface.GSM_SMS_FAIL_CAUSE_UNSPECIFIED_ERROR, null);
-                }
-                break;
-
             default:
-                Rlog.e(TAG, "Ignoring unexpected message, what=" + msg.what);
+                Log.e(TAG, "Ignoring unexpected message, what=" + msg.what);
         }
     }
 }

@@ -27,69 +27,70 @@ import android.provider.Telephony;
  * {@hide}
  */
 public abstract class SmsMessageBase {
+    private static final String LOG_TAG = "SMS";
+
     /** {@hide} The address of the SMSC. May be null */
-    protected String mScAddress;
+    protected String scAddress;
 
     /** {@hide} The address of the sender */
-    protected SmsAddress mOriginatingAddress;
+    protected SmsAddress originatingAddress;
 
     /** {@hide} The message body as a string. May be null if the message isn't text */
-    protected String mMessageBody;
+    protected String messageBody;
 
     /** {@hide} */
-    protected String mPseudoSubject;
+    protected String pseudoSubject;
 
     /** {@hide} Non-null if this is an email gateway message */
-    protected String mEmailFrom;
+    protected String emailFrom;
 
     /** {@hide} Non-null if this is an email gateway message */
-    protected String mEmailBody;
+    protected String emailBody;
 
     /** {@hide} */
-    protected boolean mIsEmail;
+    protected boolean isEmail;
 
     /** {@hide} */
-    protected long mScTimeMillis;
+    protected long scTimeMillis;
 
     /** {@hide} The raw PDU of the message */
     protected byte[] mPdu;
 
     /** {@hide} The raw bytes for the user data section of the message */
-    protected byte[] mUserData;
+    protected byte[] userData;
 
     /** {@hide} */
-    protected SmsHeader mUserDataHeader;
+    protected SmsHeader userDataHeader;
 
     // "Message Waiting Indication Group"
     // 23.038 Section 4
     /** {@hide} */
-    protected boolean mIsMwi;
+    protected boolean isMwi;
 
     /** {@hide} */
-    protected boolean mMwiSense;
+    protected boolean mwiSense;
 
     /** {@hide} */
-    protected boolean mMwiDontStore;
+    protected boolean mwiDontStore;
 
     /**
      * Indicates status for messages stored on the ICC.
      */
-    protected int mStatusOnIcc = -1;
+    protected int statusOnIcc = -1;
 
     /**
      * Record index of message in the EF.
      */
-    protected int mIndexOnIcc = -1;
+    protected int indexOnIcc = -1;
 
     /** TP-Message-Reference - Message Reference of sent message. @hide */
-    public int mMessageRef;
+    public int messageRef;
 
     // TODO(): This class is duplicated in SmsMessage.java. Refactor accordingly.
     public static abstract class SubmitPduBase  {
         public byte[] encodedScAddress; // Null if not applicable.
         public byte[] encodedMessage;
 
-        @Override
         public String toString() {
             return "SubmitPdu: encodedScAddress = "
                     + Arrays.toString(encodedScAddress)
@@ -103,7 +104,7 @@ public abstract class SmsMessageBase {
      * or null if there is none.
      */
     public String getServiceCenterAddress() {
-        return mScAddress;
+        return scAddress;
     }
 
     /**
@@ -111,11 +112,11 @@ public abstract class SmsMessageBase {
      * form or null if unavailable
      */
     public String getOriginatingAddress() {
-        if (mOriginatingAddress == null) {
+        if (originatingAddress == null) {
             return null;
         }
 
-        return mOriginatingAddress.getAddressString();
+        return originatingAddress.getAddressString();
     }
 
     /**
@@ -124,8 +125,8 @@ public abstract class SmsMessageBase {
      * unavailable.
      */
     public String getDisplayOriginatingAddress() {
-        if (mIsEmail) {
-            return mEmailFrom;
+        if (isEmail) {
+            return emailFrom;
         } else {
             return getOriginatingAddress();
         }
@@ -136,7 +137,7 @@ public abstract class SmsMessageBase {
      * @return message body is there is one, otherwise null
      */
     public String getMessageBody() {
-        return mMessageBody;
+        return messageBody;
     }
 
     /**
@@ -149,8 +150,8 @@ public abstract class SmsMessageBase {
      * an email gateway. Returns null if message body unavailable.
      */
     public String getDisplayMessageBody() {
-        if (mIsEmail) {
-            return mEmailBody;
+        if (isEmail) {
+            return emailBody;
         } else {
             return getMessageBody();
         }
@@ -161,14 +162,14 @@ public abstract class SmsMessageBase {
      * if not present
      */
     public String getPseudoSubject() {
-        return mPseudoSubject == null ? "" : mPseudoSubject;
+        return pseudoSubject == null ? "" : pseudoSubject;
     }
 
     /**
      * Returns the service centre timestamp in currentTimeMillis() format
      */
     public long getTimestampMillis() {
-        return mScTimeMillis;
+        return scTimeMillis;
     }
 
     /**
@@ -178,7 +179,7 @@ public abstract class SmsMessageBase {
      *         sender / subject / parsed body are available
      */
     public boolean isEmail() {
-        return mIsEmail;
+        return isEmail;
     }
 
     /**
@@ -186,7 +187,7 @@ public abstract class SmsMessageBase {
      *         null otherwise
      */
     public String getEmailBody() {
-        return mEmailBody;
+        return emailBody;
     }
 
     /**
@@ -194,7 +195,7 @@ public abstract class SmsMessageBase {
      *         the gateway. null otherwise
      */
     public String getEmailFrom() {
-        return mEmailFrom;
+        return emailFrom;
     }
 
     /**
@@ -239,7 +240,7 @@ public abstract class SmsMessageBase {
      * present.
      */
     public byte[] getUserData() {
-        return mUserData;
+        return userData;
     }
 
     /**
@@ -248,7 +249,7 @@ public abstract class SmsMessageBase {
      * {@hide}
      */
     public SmsHeader getUserDataHeader() {
-        return mUserDataHeader;
+        return userDataHeader;
     }
 
     /**
@@ -299,7 +300,7 @@ public abstract class SmsMessageBase {
      *         SmsManager.STATUS_ON_ICC_UNSENT
      */
     public int getStatusOnIcc() {
-        return mStatusOnIcc;
+        return statusOnIcc;
     }
 
     /**
@@ -308,13 +309,13 @@ public abstract class SmsMessageBase {
      *         SmsMessage was not created from a ICC SMS EF record.
      */
     public int getIndexOnIcc() {
-        return mIndexOnIcc;
+        return indexOnIcc;
     }
 
     protected void parseMessageBody() {
         // originatingAddress could be null if this message is from a status
         // report.
-        if (mOriginatingAddress != null && mOriginatingAddress.couldBeEmailGateway()) {
+        if (originatingAddress != null && originatingAddress.couldBeEmailGateway()) {
             extractEmailAddressFromMessageBody();
         }
     }
@@ -339,11 +340,11 @@ public abstract class SmsMessageBase {
          * -or-
          * 2. [x@y][ ]/[body]
          */
-         String[] parts = mMessageBody.split("( /)|( )", 2);
+         String[] parts = messageBody.split("( /)|( )", 2);
          if (parts.length < 2) return;
-         mEmailFrom = parts[0];
-         mEmailBody = parts[1];
-         mIsEmail = Telephony.Mms.isEmailAddress(mEmailFrom);
+         emailFrom = parts[0];
+         emailBody = parts[1];
+         isEmail = Telephony.Mms.isEmailAddress(emailFrom);
     }
 
 }

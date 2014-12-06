@@ -19,9 +19,11 @@ package com.android.internal.telephony.cdma;
 import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
-import android.telephony.Rlog;
+import android.os.Message;
+import android.util.Log;
 import android.util.Xml;
 
+import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneBase;
 import com.android.internal.util.XmlUtils;
 
@@ -42,38 +44,38 @@ public final class EriManager {
 
     class EriFile {
 
-        int mVersionNumber;                      // File version number
-        int mNumberOfEriEntries;                 // Number of entries
-        int mEriFileType;                        // Eri Phase 0/1
-        //int mNumberOfIconImages;               // reserved for future use
-        //int mIconImageType;                    // reserved for future use
-        String[] mCallPromptId;                  // reserved for future use
-        HashMap<Integer, EriInfo> mRoamIndTable; // Roaming Indicator Table
+        public int mVersionNumber;                      // File version number
+        public int mNumberOfEriEntries;                 // Number of entries
+        public int mEriFileType;                        // Eri Phase 0/1
+        //public int mNumberOfIconImages;               // reserved for future use
+        //public int mIconImageType;                    // reserved for future use
+        public String[] mCallPromptId;                  // reserved for future use
+        public HashMap<Integer, EriInfo> mRoamIndTable; // Roaming Indicator Table
 
-        EriFile() {
-            mVersionNumber = -1;
-            mNumberOfEriEntries = 0;
-            mEriFileType = -1;
-            mCallPromptId = new String[] { "", "", "" };
-            mRoamIndTable = new HashMap<Integer, EriInfo>();
+        public EriFile() {
+            this.mVersionNumber = -1;
+            this.mNumberOfEriEntries = 0;
+            this.mEriFileType = -1;
+            this.mCallPromptId = new String[] { "", "", "" };
+            this.mRoamIndTable = new HashMap<Integer, EriInfo>();
         }
     }
 
     class EriDisplayInformation {
-        int mEriIconIndex;
-        int mEriIconMode;
-        String mEriIconText;
+        public int mEriIconIndex;
+        public int mEriIconMode;
+        public String mEriIconText;
 
-        EriDisplayInformation(int eriIconIndex, int eriIconMode, String eriIconText) {
+        public EriDisplayInformation(int eriIconIndex, int eriIconMode, String eriIconText) {
             mEriIconIndex = eriIconIndex;
             mEriIconMode = eriIconMode;
             mEriIconText = eriIconText;
         }
 
 //        public void setParameters(int eriIconIndex, int eriIconMode, String eriIconText){
-//            mEriIconIndex = eriIconIndex;
-//            mEriIconMode = eriIconMode;
-//            mEriIconText = eriIconText;
+//            this.mEriIconIndex = eriIconIndex;
+//            this.mEriIconMode = eriIconMode;
+//            this.mEriIconText = eriIconText;
 //        }
 
         @Override
@@ -87,24 +89,26 @@ public final class EriManager {
     private static final boolean DBG = true;
     private static final boolean VDBG = false;
 
-    static final int ERI_FROM_XML          = 0;
-    static final int ERI_FROM_FILE_SYSTEM  = 1;
-    static final int ERI_FROM_MODEM        = 2;
+    public static final int ERI_FROM_XML          = 0;
+    public static final int ERI_FROM_FILE_SYSTEM  = 1;
+    public static final int ERI_FROM_MODEM        = 2;
 
+    private PhoneBase mPhone;
     private Context mContext;
     private int mEriFileSource = ERI_FROM_XML;
-    private boolean mIsEriFileLoaded;
+    private boolean isEriFileLoaded;
     private EriFile mEriFile;
 
     public EriManager(PhoneBase phone, Context context, int eriFileSource) {
-        mContext = context;
-        mEriFileSource = eriFileSource;
-        mEriFile = new EriFile();
+        this.mPhone = phone;
+        this.mContext = context;
+        this.mEriFileSource = eriFileSource;
+        this.mEriFile = new EriFile();
     }
 
     public void dispose() {
         mEriFile = new EriFile();
-        mIsEriFileLoaded = false;
+        isEriFileLoaded = false;
     }
 
 
@@ -155,22 +159,22 @@ public final class EriManager {
         Resources r = mContext.getResources();
 
         try {
-            if (DBG) Rlog.d(LOG_TAG, "loadEriFileFromXml: check for alternate file");
+            if (DBG) Log.d(LOG_TAG, "loadEriFileFromXml: check for alternate file");
             stream = new FileInputStream(
                             r.getString(com.android.internal.R.string.alternate_eri_file));
             parser = Xml.newPullParser();
             parser.setInput(stream, null);
-            if (DBG) Rlog.d(LOG_TAG, "loadEriFileFromXml: opened alternate file");
+            if (DBG) Log.d(LOG_TAG, "loadEriFileFromXml: opened alternate file");
         } catch (FileNotFoundException e) {
-            if (DBG) Rlog.d(LOG_TAG, "loadEriFileFromXml: no alternate file");
+            if (DBG) Log.d(LOG_TAG, "loadEriFileFromXml: no alternate file");
             parser = null;
         } catch (XmlPullParserException e) {
-            if (DBG) Rlog.d(LOG_TAG, "loadEriFileFromXml: no parser for alternate file");
+            if (DBG) Log.d(LOG_TAG, "loadEriFileFromXml: no parser for alternate file");
             parser = null;
         }
 
         if (parser == null) {
-            if (DBG) Rlog.d(LOG_TAG, "loadEriFileFromXml: open normal file");
+            if (DBG) Log.d(LOG_TAG, "loadEriFileFromXml: open normal file");
             parser = r.getXml(com.android.internal.R.xml.eri);
         }
 
@@ -189,7 +193,7 @@ public final class EriManager {
                 String name = parser.getName();
                 if (name == null) {
                     if (parsedEriEntries != mEriFile.mNumberOfEriEntries)
-                        Rlog.e(LOG_TAG, "Error Parsing ERI file: " +  mEriFile.mNumberOfEriEntries
+                        Log.e(LOG_TAG, "Error Parsing ERI file: " +  mEriFile.mNumberOfEriEntries
                                 + " defined, " + parsedEriEntries + " parsed!");
                     break;
                 } else if (name.equals("CallPromptId")) {
@@ -198,7 +202,7 @@ public final class EriManager {
                     if (id >= 0 && id <= 2) {
                         mEriFile.mCallPromptId[id] = text;
                     } else {
-                        Rlog.e(LOG_TAG, "Error Parsing ERI file: found" + id + " CallPromptId");
+                        Log.e(LOG_TAG, "Error Parsing ERI file: found" + id + " CallPromptId");
                     }
 
                 } else if (name.equals("EriInfo")) {
@@ -216,11 +220,11 @@ public final class EriManager {
                 }
             }
 
-            if (DBG) Rlog.d(LOG_TAG, "loadEriFileFromXml: eri parsing successful, file loaded");
-            mIsEriFileLoaded = true;
+            if (DBG) Log.d(LOG_TAG, "loadEriFileFromXml: eri parsing successful, file loaded");
+            isEriFileLoaded = true;
 
         } catch (Exception e) {
-            Rlog.e(LOG_TAG, "Got exception while loading ERI file.", e);
+            Log.e(LOG_TAG, "Got exception while loading ERI file.", e);
         } finally {
             if (parser instanceof XmlResourceParser) {
                 ((XmlResourceParser)parser).close();
@@ -264,7 +268,7 @@ public final class EriManager {
      *
      */
     public boolean isEriFileLoaded() {
-        return mIsEriFileLoaded;
+        return isEriFileLoaded;
     }
 
     /**
@@ -283,14 +287,14 @@ public final class EriManager {
         EriDisplayInformation ret;
 
         // Carrier can use eri.xml to customize any built-in roaming display indications
-        if (mIsEriFileLoaded) {
+        if (isEriFileLoaded) {
             EriInfo eriInfo = getEriInfo(roamInd);
             if (eriInfo != null) {
-                if (VDBG) Rlog.v(LOG_TAG, "ERI roamInd " + roamInd + " found in ERI file");
+                if (VDBG) Log.v(LOG_TAG, "ERI roamInd " + roamInd + " found in ERI file");
                 ret = new EriDisplayInformation(
-                        eriInfo.iconIndex,
-                        eriInfo.iconMode,
-                        eriInfo.eriText);
+                        eriInfo.mIconIndex,
+                        eriInfo.mIconMode,
+                        eriInfo.mEriText);
                 return ret;
             }
         }
@@ -392,18 +396,18 @@ public final class EriManager {
 
         // Handling the non standard Enhanced Roaming Indicator (roamInd > 63)
         default:
-            if (!mIsEriFileLoaded) {
+            if (!isEriFileLoaded) {
                 // ERI file NOT loaded
-                if (DBG) Rlog.d(LOG_TAG, "ERI File not loaded");
+                if (DBG) Log.d(LOG_TAG, "ERI File not loaded");
                 if(defRoamInd > 2) {
-                    if (VDBG) Rlog.v(LOG_TAG, "ERI defRoamInd > 2 ...flashing");
+                    if (VDBG) Log.v(LOG_TAG, "ERI defRoamInd > 2 ...flashing");
                     ret = new EriDisplayInformation(
                             EriInfo.ROAMING_INDICATOR_FLASH,
                             EriInfo.ROAMING_ICON_MODE_FLASH,
                             mContext.getText(com.android.internal
                                                             .R.string.roamingText2).toString());
                 } else {
-                    if (VDBG) Rlog.v(LOG_TAG, "ERI defRoamInd <= 2");
+                    if (VDBG) Log.v(LOG_TAG, "ERI defRoamInd <= 2");
                     switch (defRoamInd) {
                     case EriInfo.ROAMING_INDICATOR_ON:
                         ret = new EriDisplayInformation(
@@ -439,11 +443,11 @@ public final class EriManager {
                 EriInfo defEriInfo = getEriInfo(defRoamInd);
                 if (eriInfo == null) {
                     if (VDBG) {
-                        Rlog.v(LOG_TAG, "ERI roamInd " + roamInd
+                        Log.v(LOG_TAG, "ERI roamInd " + roamInd
                             + " not found in ERI file ...using defRoamInd " + defRoamInd);
                     }
                     if(defEriInfo == null) {
-                        Rlog.e(LOG_TAG, "ERI defRoamInd " + defRoamInd
+                        Log.e(LOG_TAG, "ERI defRoamInd " + defRoamInd
                                 + " not found in ERI file ...on");
                         ret = new EriDisplayInformation(
                                 EriInfo.ROAMING_INDICATOR_ON,
@@ -453,24 +457,24 @@ public final class EriManager {
 
                     } else {
                         if (VDBG) {
-                            Rlog.v(LOG_TAG, "ERI defRoamInd " + defRoamInd + " found in ERI file");
+                            Log.v(LOG_TAG, "ERI defRoamInd " + defRoamInd + " found in ERI file");
                         }
                         ret = new EriDisplayInformation(
-                                defEriInfo.iconIndex,
-                                defEriInfo.iconMode,
-                                defEriInfo.eriText);
+                                defEriInfo.mIconIndex,
+                                defEriInfo.mIconMode,
+                                defEriInfo.mEriText);
                     }
                 } else {
-                    if (VDBG) Rlog.v(LOG_TAG, "ERI roamInd " + roamInd + " found in ERI file");
+                    if (VDBG) Log.v(LOG_TAG, "ERI roamInd " + roamInd + " found in ERI file");
                     ret = new EriDisplayInformation(
-                            eriInfo.iconIndex,
-                            eriInfo.iconMode,
-                            eriInfo.eriText);
+                            eriInfo.mIconIndex,
+                            eriInfo.mIconMode,
+                            eriInfo.mEriText);
                 }
             }
             break;
         }
-        if (VDBG) Rlog.v(LOG_TAG, "Displaying ERI " + ret.toString());
+        if (VDBG) Log.v(LOG_TAG, "Displaying ERI " + ret.toString());
         return ret;
     }
 

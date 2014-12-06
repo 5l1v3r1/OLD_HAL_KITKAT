@@ -19,14 +19,12 @@ package com.android.internal.telephony.cdma;
 import android.content.Context;
 
 import com.android.internal.telephony.CommandException;
-import com.android.internal.telephony.uicc.UiccCardApplication;
-import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppState;
 import com.android.internal.telephony.MmiCode;
 
 import android.os.AsyncResult;
 import android.os.Handler;
 import android.os.Message;
-import android.telephony.Rlog;
+import android.util.Log;
 
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
@@ -38,18 +36,15 @@ import java.util.regex.Matcher;
  *
  */
 public final class CdmaMmiCode  extends Handler implements MmiCode {
-    static final String LOG_TAG = "CdmaMmiCode";
+    static final String LOG_TAG = "CDMA_MMI";
 
     // Constants
 
     // From TS 22.030 6.5.2
     static final String ACTION_REGISTER = "**";
 
-    // Supplementary Service codes for PIN/PIN2/PUK/PUK2 from TS 22.030 Annex B
-    static final String SC_PIN          = "04";
-    static final String SC_PIN2         = "042";
+    // Supp Service codes from TS 22.030 Annex B
     static final String SC_PUK          = "05";
-    static final String SC_PUK2         = "052";
 
     // Event Constant
 
@@ -57,19 +52,18 @@ public final class CdmaMmiCode  extends Handler implements MmiCode {
 
     // Instance Variables
 
-    CDMAPhone mPhone;
-    Context mContext;
-    UiccCardApplication mUiccApplication;
+    CDMAPhone phone;
+    Context context;
 
-    String mAction;              // ACTION_REGISTER
-    String mSc;                  // Service Code
-    String mSia, mSib, mSic;     // Service Info a,b,c
-    String mPoundString;         // Entire MMI string up to and including #
-    String mDialingNumber;
-    String mPwd;                 // For password registration
+    String action;              // ACTION_REGISTER
+    String sc;                  // Service Code
+    String sia, sib, sic;       // Service Info a,b,c
+    String poundString;         // Entire MMI string up to and including #
+    String dialingNumber;
+    String pwd;                 // For password registration
 
-    State mState = State.PENDING;
-    CharSequence mMessage;
+    State state = State.PENDING;
+    CharSequence message;
 
     // Class Variables
 
@@ -104,7 +98,7 @@ public final class CdmaMmiCode  extends Handler implements MmiCode {
      */
 
     public static CdmaMmiCode
-    newFromDialString(String dialString, CDMAPhone phone, UiccCardApplication app) {
+    newFromDialString(String dialString, CDMAPhone phone) {
         Matcher m;
         CdmaMmiCode ret = null;
 
@@ -112,15 +106,15 @@ public final class CdmaMmiCode  extends Handler implements MmiCode {
 
         // Is this formatted like a standard supplementary service code?
         if (m.matches()) {
-            ret = new CdmaMmiCode(phone,app);
-            ret.mPoundString = makeEmptyNull(m.group(MATCH_GROUP_POUND_STRING));
-            ret.mAction = makeEmptyNull(m.group(MATCH_GROUP_ACTION));
-            ret.mSc = makeEmptyNull(m.group(MATCH_GROUP_SERVICE_CODE));
-            ret.mSia = makeEmptyNull(m.group(MATCH_GROUP_SIA));
-            ret.mSib = makeEmptyNull(m.group(MATCH_GROUP_SIB));
-            ret.mSic = makeEmptyNull(m.group(MATCH_GROUP_SIC));
-            ret.mPwd = makeEmptyNull(m.group(MATCH_GROUP_PWD_CONFIRM));
-            ret.mDialingNumber = makeEmptyNull(m.group(MATCH_GROUP_DIALING_NUMBER));
+            ret = new CdmaMmiCode(phone);
+            ret.poundString = makeEmptyNull(m.group(MATCH_GROUP_POUND_STRING));
+            ret.action = makeEmptyNull(m.group(MATCH_GROUP_ACTION));
+            ret.sc = makeEmptyNull(m.group(MATCH_GROUP_SERVICE_CODE));
+            ret.sia = makeEmptyNull(m.group(MATCH_GROUP_SIA));
+            ret.sib = makeEmptyNull(m.group(MATCH_GROUP_SIB));
+            ret.sic = makeEmptyNull(m.group(MATCH_GROUP_SIC));
+            ret.pwd = makeEmptyNull(m.group(MATCH_GROUP_PWD_CONFIRM));
+            ret.dialingNumber = makeEmptyNull(m.group(MATCH_GROUP_DIALING_NUMBER));
 
         }
 
@@ -141,41 +135,36 @@ public final class CdmaMmiCode  extends Handler implements MmiCode {
 
     // Constructor
 
-    CdmaMmiCode (CDMAPhone phone, UiccCardApplication app) {
+    CdmaMmiCode (CDMAPhone phone) {
         super(phone.getHandler().getLooper());
-        mPhone = phone;
-        mContext = phone.getContext();
-        mUiccApplication = app;
+        this.phone = phone;
+        this.context = phone.getContext();
     }
 
     // MmiCode implementation
 
-    @Override
     public State
     getState() {
-        return mState;
+        return state;
     }
 
-    @Override
     public CharSequence
     getMessage() {
-        return mMessage;
+        return message;
     }
 
     // inherited javadoc suffices
-    @Override
     public void
     cancel() {
         // Complete or failed cannot be cancelled
-        if (mState == State.COMPLETE || mState == State.FAILED) {
+        if (state == State.COMPLETE || state == State.FAILED) {
             return;
         }
 
-        mState = State.CANCELLED;
-        mPhone.onMMIDone (this);
+        state = State.CANCELLED;
+        phone.onMMIDone (this);
     }
 
-    @Override
     public boolean isCancelable() {
         return false;
     }
@@ -185,108 +174,80 @@ public final class CdmaMmiCode  extends Handler implements MmiCode {
     /**
      * @return true if the Service Code is PIN/PIN2/PUK/PUK2-related
      */
-    boolean isPinPukCommand() {
-        return mSc != null && (mSc.equals(SC_PIN) || mSc.equals(SC_PIN2)
-                              || mSc.equals(SC_PUK) || mSc.equals(SC_PUK2));
-    }
+    boolean isPukCommand() {
+        return sc != null && sc.equals(SC_PUK);
+     }
 
     boolean isRegister() {
-        return mAction != null && mAction.equals(ACTION_REGISTER);
+        return action != null && action.equals(ACTION_REGISTER);
     }
 
-    @Override
     public boolean isUssdRequest() {
-        Rlog.w(LOG_TAG, "isUssdRequest is not implemented in CdmaMmiCode");
+        Log.w(LOG_TAG, "isUssdRequest is not implemented in CdmaMmiCode");
         return false;
     }
 
     /** Process a MMI PUK code */
     void
-    processCode() {
+    processCode () {
         try {
-            if (isPinPukCommand()) {
-                // TODO: This is the same as the code in GsmMmiCode.java,
-                // MmiCode should be an abstract or base class and this and
-                // other common variables and code should be promoted.
-
-                // sia = old PIN or PUK
+            if (isPukCommand()) {
+                // sia = old PUK
                 // sib = new PIN
                 // sic = new PIN
-                String oldPinOrPuk = mSia;
-                String newPinOrPuk = mSib;
-                int pinLen = newPinOrPuk.length();
+                String oldPinOrPuk = sia;
+                String newPin = sib;
+                int pinLen = newPin.length();
                 if (isRegister()) {
-                    if (!newPinOrPuk.equals(mSic)) {
+                    if (!newPin.equals(sic)) {
                         // password mismatch; return error
                         handlePasswordError(com.android.internal.R.string.mismatchPin);
                     } else if (pinLen < 4 || pinLen > 8 ) {
                         // invalid length
                         handlePasswordError(com.android.internal.R.string.invalidPin);
-                    } else if (mSc.equals(SC_PIN)
-                            && mUiccApplication != null
-                            && mUiccApplication.getState() == AppState.APPSTATE_PUK) {
-                        // Sim is puk-locked
-                        handlePasswordError(com.android.internal.R.string.needPuk);
-                    } else if (mUiccApplication != null) {
-                        Rlog.d(LOG_TAG, "process mmi service code using UiccApp sc=" + mSc);
-
-                        // We have an app and the pre-checks are OK
-                        if (mSc.equals(SC_PIN)) {
-                            mUiccApplication.changeIccLockPassword(oldPinOrPuk, newPinOrPuk,
-                                    obtainMessage(EVENT_SET_COMPLETE, this));
-                        } else if (mSc.equals(SC_PIN2)) {
-                            mUiccApplication.changeIccFdnPassword(oldPinOrPuk, newPinOrPuk,
-                                    obtainMessage(EVENT_SET_COMPLETE, this));
-                        } else if (mSc.equals(SC_PUK)) {
-                            mUiccApplication.supplyPuk(oldPinOrPuk, newPinOrPuk,
-                                    obtainMessage(EVENT_SET_COMPLETE, this));
-                        } else if (mSc.equals(SC_PUK2)) {
-                            mUiccApplication.supplyPuk2(oldPinOrPuk, newPinOrPuk,
-                                    obtainMessage(EVENT_SET_COMPLETE, this));
-                        } else {
-                            throw new RuntimeException("Unsupported service code=" + mSc);
-                        }
                     } else {
-                        throw new RuntimeException("No application mUiccApplicaiton is null");
+                        phone.mCM.supplyIccPuk(oldPinOrPuk, newPin,
+                                obtainMessage(EVENT_SET_COMPLETE, this));
                     }
                 } else {
-                    throw new RuntimeException ("Ivalid register/action=" + mAction);
+                    throw new RuntimeException ("Invalid or Unsupported MMI Code");
                 }
+            } else {
+                throw new RuntimeException ("Invalid or Unsupported MMI Code");
             }
         } catch (RuntimeException exc) {
-            mState = State.FAILED;
-            mMessage = mContext.getText(com.android.internal.R.string.mmiError);
-            mPhone.onMMIDone(this);
+            state = State.FAILED;
+            message = context.getText(com.android.internal.R.string.mmiError);
+            phone.onMMIDone(this);
         }
     }
 
     private void handlePasswordError(int res) {
-        mState = State.FAILED;
+        state = State.FAILED;
         StringBuilder sb = new StringBuilder(getScString());
         sb.append("\n");
-        sb.append(mContext.getText(res));
-        mMessage = sb;
-        mPhone.onMMIDone(this);
+        sb.append(context.getText(res));
+        message = sb;
+        phone.onMMIDone(this);
     }
 
-    @Override
     public void
     handleMessage (Message msg) {
         AsyncResult ar;
 
         if (msg.what == EVENT_SET_COMPLETE) {
             ar = (AsyncResult) (msg.obj);
-            onSetComplete(msg, ar);
+            onSetComplete(ar);
         } else {
-            Rlog.e(LOG_TAG, "Unexpected reply");
+            Log.e(LOG_TAG, "Unexpected reply");
         }
     }
     // Private instance methods
 
     private CharSequence getScString() {
-        if (mSc != null) {
-            if (isPinPukCommand()) {
-                return mContext.getText(com.android.internal.R.string.PinMmi);
+        if (sc != null) {
+            if (isPukCommand()) {
+                return context.getText(com.android.internal.R.string.PinMmi);
             }
         }
 
@@ -294,71 +255,42 @@ public final class CdmaMmiCode  extends Handler implements MmiCode {
     }
 
     private void
-    onSetComplete(Message msg, AsyncResult ar){
+    onSetComplete(AsyncResult ar){
         StringBuilder sb = new StringBuilder(getScString());
         sb.append("\n");
 
         if (ar.exception != null) {
-            mState = State.FAILED;
+            state = State.FAILED;
             if (ar.exception instanceof CommandException) {
                 CommandException.Error err = ((CommandException)(ar.exception)).getCommandError();
                 if (err == CommandException.Error.PASSWORD_INCORRECT) {
-                    if (isPinPukCommand()) {
-                        // look specifically for the PUK commands and adjust
-                        // the message accordingly.
-                        if (mSc.equals(SC_PUK) || mSc.equals(SC_PUK2)) {
-                            sb.append(mContext.getText(
-                                    com.android.internal.R.string.badPuk));
-                        } else {
-                            sb.append(mContext.getText(
-                                    com.android.internal.R.string.badPin));
-                        }
-                        // Get the No. of retries remaining to unlock PUK/PUK2
-                        int attemptsRemaining = msg.arg1;
-                        if (attemptsRemaining <= 0) {
-                            Rlog.d(LOG_TAG, "onSetComplete: PUK locked,"
-                                    + " cancel as lock screen will handle this");
-                            mState = State.CANCELLED;
-                        } else if (attemptsRemaining > 0) {
-                            Rlog.d(LOG_TAG, "onSetComplete: attemptsRemaining="+attemptsRemaining);
-                            sb.append(mContext.getResources().getQuantityString(
-                                    com.android.internal.R.plurals.pinpuk_attempts,
-                                    attemptsRemaining, attemptsRemaining));
-                        }
+                    if (isPukCommand()) {
+                        sb.append(context.getText(
+                                com.android.internal.R.string.badPuk));
                     } else {
-                        sb.append(mContext.getText(
+                        sb.append(context.getText(
                                 com.android.internal.R.string.passwordIncorrect));
                     }
-                } else if (err == CommandException.Error.SIM_PUK2) {
-                    sb.append(mContext.getText(
-                            com.android.internal.R.string.badPin));
-                    sb.append("\n");
-                    sb.append(mContext.getText(
-                            com.android.internal.R.string.needPuk2));
-                } else if (err == CommandException.Error.REQUEST_NOT_SUPPORTED) {
-                    if (mSc.equals(SC_PIN)) {
-                        sb.append(mContext.getText(com.android.internal.R.string.enablePin));
-                    }
                 } else {
-                    sb.append(mContext.getText(
+                    sb.append(context.getText(
                             com.android.internal.R.string.mmiError));
                 }
             } else {
-                sb.append(mContext.getText(
+                sb.append(context.getText(
                         com.android.internal.R.string.mmiError));
             }
         } else if (isRegister()) {
-            mState = State.COMPLETE;
-            sb.append(mContext.getText(
+            state = State.COMPLETE;
+            sb.append(context.getText(
                     com.android.internal.R.string.serviceRegistered));
         } else {
-            mState = State.FAILED;
-            sb.append(mContext.getText(
+            state = State.FAILED;
+            sb.append(context.getText(
                     com.android.internal.R.string.mmiError));
         }
 
-        mMessage = sb;
-        mPhone.onMMIDone(this);
+        message = sb;
+        phone.onMMIDone(this);
     }
 
 }

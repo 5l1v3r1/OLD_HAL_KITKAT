@@ -68,12 +68,10 @@ public class Input implements Parcelable {
         duration = in.readParcelable(null);
     }
 
-    @Override
     public int describeContents() {
         return 0;
     }
 
-    @Override
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeString(text);
         dest.writeString(defaultText);
@@ -90,12 +88,10 @@ public class Input implements Parcelable {
     }
 
     public static final Parcelable.Creator<Input> CREATOR = new Parcelable.Creator<Input>() {
-        @Override
         public Input createFromParcel(Parcel in) {
             return new Input(in);
         }
 
-        @Override
         public Input[] newArray(int size) {
             return new Input[size];
         }
