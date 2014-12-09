@@ -129,7 +129,7 @@ public class PhoneFactory {
                     default:
                         //Get cdmaSubscription mode from Settings.System
                         cdmaSubscription = Settings.Global.getInt(context.getContentResolver(),
-                                Settings.Global.PREFERRED_CDMA_SUBSCRIPTION,
+                                Settings.Global.CDMA_SUBSCRIPTION_MODE,
                                 preferredCdmaSubscription);
                         Log.i(LOG_TAG, "lteOnCdma not set, using PREFERRED_CDMA_SUBSCRIPTION");
                         break;
