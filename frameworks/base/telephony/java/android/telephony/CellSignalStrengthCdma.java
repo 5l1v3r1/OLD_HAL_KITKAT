@@ -18,7 +18,7 @@ package android.telephony;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.telephony.Rlog;
+import android.util.Log;
 
 /**
  * LTE signal strength related information.
@@ -331,12 +331,10 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         if (DBG) log("writeToParcel(Parcel, int): " + toString());
-        // Need to multiply CdmaDbm, CdmaEcio, EvdoDbm and EvdoEcio by -1
-        // to ensure consistency when reading values written here
-        dest.writeInt(mCdmaDbm * -1);
-        dest.writeInt(mCdmaEcio * -1);
-        dest.writeInt(mEvdoDbm * -1);
-        dest.writeInt(mEvdoEcio * -1);
+        dest.writeInt(mCdmaDbm);
+        dest.writeInt(mCdmaEcio);
+        dest.writeInt(mEvdoDbm);
+        dest.writeInt(mEvdoEcio);
         dest.writeInt(mEvdoSnr);
     }
 
@@ -345,13 +343,10 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
      * where the TYPE_LTE token is already been processed.
      */
     private CellSignalStrengthCdma(Parcel in) {
-        // CdmaDbm, CdmaEcio, EvdoDbm and EvdoEcio are written into
-        // the parcel as positive values.
-        // Need to convert into negative values
-        mCdmaDbm = in.readInt() * -1;
-        mCdmaEcio = in.readInt() * -1;
-        mEvdoDbm = in.readInt() * -1;
-        mEvdoEcio = in.readInt() * -1;
+        mCdmaDbm = in.readInt();
+        mCdmaEcio = in.readInt();
+        mEvdoDbm = in.readInt();
+        mEvdoEcio = in.readInt();
         mEvdoSnr = in.readInt();
         if (DBG) log("CellSignalStrengthCdma(Parcel): " + toString());
     }
@@ -381,6 +376,6 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
      * log
      */
     private static void log(String s) {
-        Rlog.w(LOG_TAG, s);
+        Log.w(LOG_TAG, s);
     }
 }

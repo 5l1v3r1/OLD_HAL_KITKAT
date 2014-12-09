@@ -18,7 +18,7 @@ package android.telephony;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.telephony.Rlog;
+import android.util.Log;
 
 /**
  * CellIdentity is to represent a unique CDMA cell
@@ -93,21 +93,21 @@ public final class CellIdentityCdma implements Parcelable {
     }
 
     /**
-     * @return Network Id 0..65535, Integer.MAX_VALUE if unknown
+     * @return Network Id 0..65535
      */
     public int getNetworkId() {
         return mNetworkId;
     }
 
     /**
-     * @return System Id 0..32767, Integer.MAX_VALUE if unknown
+     * @return System Id 0..32767
      */
     public int getSystemId() {
         return mSystemId;
     }
 
     /**
-     * @return Base Station Id 0..65535, Integer.MAX_VALUE if unknown
+     * @return Base Station Id 0..65535
      */
     public int getBasestationId() {
         return mBasestationId;
@@ -118,7 +118,7 @@ public final class CellIdentityCdma implements Parcelable {
      * specified in 3GPP2 C.S0005-A v6.0. It is represented in units
      * of 0.25 seconds and ranges from -2592000 to 2592000, both
      * values inclusive (corresponding to a range of -180
-     * to +180 degrees). Integer.MAX_VALUE if unknown.
+     * to +180 degrees).
      */
     public int getLongitude() {
         return mLongitude;
@@ -129,7 +129,7 @@ public final class CellIdentityCdma implements Parcelable {
      * specified in 3GPP2 C.S0005-A v6.0. It is represented in units
      * of 0.25 seconds and ranges from -1296000 to 1296000, both
      * values inclusive (corresponding to a range of -90
-     * to +90 degrees). Integer.MAX_VALUE if unknown.
+     * to +90 degrees).
      */
     public int getLatitude() {
         return mLatitude;
@@ -162,13 +162,13 @@ public final class CellIdentityCdma implements Parcelable {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("CellIdentityCdma:{");
+        StringBuilder sb = new StringBuilder("CdmaCellIdentitiy:");
+        sb.append(super.toString());
         sb.append(" mNetworkId="); sb.append(mNetworkId);
         sb.append(" mSystemId="); sb.append(mSystemId);
         sb.append(" mBasestationId="); sb.append(mBasestationId);
         sb.append(" mLongitude="); sb.append(mLongitude);
         sb.append(" mLatitude="); sb.append(mLatitude);
-        sb.append("}");
 
         return sb.toString();
     }
@@ -219,6 +219,6 @@ public final class CellIdentityCdma implements Parcelable {
      * log
      */
     private static void log(String s) {
-        Rlog.w(LOG_TAG, s);
+        Log.w(LOG_TAG, s);
     }
 }

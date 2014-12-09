@@ -20,6 +20,7 @@ import android.content.AsyncQueryHandler;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.SQLException;
+import android.location.CountryDetector;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -30,7 +31,7 @@ import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.PhoneLookup;
 import android.telephony.PhoneNumberUtils;
 import android.text.TextUtils;
-import android.telephony.Rlog;
+import android.util.Log;
 
 /**
  * Helper class to make it easier to run asynchronous caller-id lookup queries.
@@ -136,13 +137,13 @@ public class CallerInfoAsyncQuery {
                     // However, if there is any code that this Handler calls (such as in
                     // super.handleMessage) that DOES place unexpected messages on the
                     // queue, then we need pass these messages on.
-                    if (DBG) Rlog.d(LOG_TAG, "Unexpected command (CookieWrapper is null): " + msg.what +
+                    if (DBG) Log.d(LOG_TAG, "Unexpected command (CookieWrapper is null): " + msg.what +
                             " ignored by CallerInfoWorkerHandler, passing onto parent.");
 
                     super.handleMessage(msg);
                 } else {
 
-                    if (DBG) Rlog.d(LOG_TAG, "Processing event: " + cw.event + " token (arg1): " + msg.arg1 +
+                    if (DBG) Log.d(LOG_TAG, "Processing event: " + cw.event + " token (arg1): " + msg.arg1 +
                         " command: " + msg.what + " query URI: " + sanitizeUriToString(args.uri));
 
                     switch (cw.event) {
@@ -198,7 +199,7 @@ public class CallerInfoAsyncQuery {
          */
         @Override
         protected void onQueryComplete(int token, Object cookie, Cursor cursor) {
-            if (DBG) Rlog.d(LOG_TAG, "##### onQueryComplete() #####   query complete for token: " + token);
+            if (DBG) Log.d(LOG_TAG, "##### onQueryComplete() #####   query complete for token: " + token);
 
             //get the cookie and notify the listener.
             CookieWrapper cw = (CookieWrapper) cookie;
@@ -207,7 +208,7 @@ public class CallerInfoAsyncQuery {
                 // from within this code.
                 // However, if there is any code that calls this method, we should
                 // check the parameters to make sure they're viable.
-                if (DBG) Rlog.d(LOG_TAG, "Cookie is null, ignoring onQueryComplete() request.");
+                if (DBG) Log.d(LOG_TAG, "Cookie is null, ignoring onQueryComplete() request.");
                 return;
             }
 
@@ -236,13 +237,13 @@ public class CallerInfoAsyncQuery {
                     mCallerInfo = new CallerInfo().markAsVoiceMail();
                 } else {
                     mCallerInfo = CallerInfo.getCallerInfo(mQueryContext, mQueryUri, cursor);
-                    if (DBG) Rlog.d(LOG_TAG, "==> Got mCallerInfo: " + mCallerInfo);
+                    if (DBG) Log.d(LOG_TAG, "==> Got mCallerInfo: " + mCallerInfo);
 
                     CallerInfo newCallerInfo = CallerInfo.doSecondaryLookupIfNecessary(
                             mQueryContext, cw.number, mCallerInfo);
                     if (newCallerInfo != mCallerInfo) {
                         mCallerInfo = newCallerInfo;
-                        if (DBG) Rlog.d(LOG_TAG, "#####async contact look up with numeric username"
+                        if (DBG) Log.d(LOG_TAG, "#####async contact look up with numeric username"
                                 + mCallerInfo);
                     }
 
@@ -270,13 +271,15 @@ public class CallerInfoAsyncQuery {
 
                     // Use the number entered by the user for display.
                     if (!TextUtils.isEmpty(cw.number)) {
+                        CountryDetector detector = (CountryDetector) mQueryContext.getSystemService(
+                                Context.COUNTRY_DETECTOR);
                         mCallerInfo.phoneNumber = PhoneNumberUtils.formatNumber(cw.number,
                                 mCallerInfo.normalizedNumber,
-                                CallerInfo.getCurrentCountryIso(mQueryContext));
+                                detector.detectCountry().getCountryIso());
                     }
                 }
 
-                if (DBG) Rlog.d(LOG_TAG, "constructing CallerInfo object for token: " + token);
+                if (DBG) Log.d(LOG_TAG, "constructing CallerInfo object for token: " + token);
 
                 //notify that we can clean up the queue after this.
                 CookieWrapper endMarker = new CookieWrapper();
@@ -286,7 +289,7 @@ public class CallerInfoAsyncQuery {
 
             //notify the listener that the query is complete.
             if (cw.listener != null) {
-                if (DBG) Rlog.d(LOG_TAG, "notifying listener: " + cw.listener.getClass().toString() +
+                if (DBG) Log.d(LOG_TAG, "notifying listener: " + cw.listener.getClass().toString() +
                              " for token: " + token + mCallerInfo);
                 cw.listener.onQueryComplete(token, cw.cookie, mCallerInfo);
             }
@@ -309,7 +312,7 @@ public class CallerInfoAsyncQuery {
         CallerInfoAsyncQuery c = new CallerInfoAsyncQuery();
         c.allocate(context, contactRef);
 
-        if (DBG) Rlog.d(LOG_TAG, "starting query for URI: " + contactRef + " handler: " + c.toString());
+        if (DBG) Log.d(LOG_TAG, "starting query for URI: " + contactRef + " handler: " + c.toString());
 
         //create cookieWrapper, start query
         CookieWrapper cw = new CookieWrapper();
@@ -336,9 +339,9 @@ public class CallerInfoAsyncQuery {
     public static CallerInfoAsyncQuery startQuery(int token, Context context, String number,
             OnQueryCompleteListener listener, Object cookie) {
         if (DBG) {
-            Rlog.d(LOG_TAG, "##### CallerInfoAsyncQuery startQuery()... #####");
-            Rlog.d(LOG_TAG, "- number: " + /*number*/ "xxxxxxx");
-            Rlog.d(LOG_TAG, "- cookie: " + cookie);
+            Log.d(LOG_TAG, "##### CallerInfoAsyncQuery startQuery()... #####");
+            Log.d(LOG_TAG, "- number: " + /*number*/ "xxxxxxx");
+            Log.d(LOG_TAG, "- cookie: " + cookie);
         }
 
         // Construct the URI object and query params, and start the query.
@@ -349,7 +352,7 @@ public class CallerInfoAsyncQuery {
 
         if (PhoneNumberUtils.isUriNumber(number)) {
             // "number" is really a SIP address.
-            if (DBG) Rlog.d(LOG_TAG, "  - Treating number as a SIP address: " + /*number*/ "xxxxxxx");
+            if (DBG) Log.d(LOG_TAG, "  - Treating number as a SIP address: " + /*number*/ "xxxxxxx");
 
             // We look up SIP addresses directly in the Data table:
             contactRef = Data.CONTENT_URI;
@@ -381,11 +384,11 @@ public class CallerInfoAsyncQuery {
         }
 
         if (DBG) {
-            Rlog.d(LOG_TAG, "==> contactRef: " + sanitizeUriToString(contactRef));
-            Rlog.d(LOG_TAG, "==> selection: " + selection);
+            Log.d(LOG_TAG, "==> contactRef: " + sanitizeUriToString(contactRef));
+            Log.d(LOG_TAG, "==> selection: " + selection);
             if (selectionArgs != null) {
                 for (int i = 0; i < selectionArgs.length; i++) {
-                    Rlog.d(LOG_TAG, "==> selectionArgs[" + i + "]: " + selectionArgs[i]);
+                    Log.d(LOG_TAG, "==> selectionArgs[" + i + "]: " + selectionArgs[i]);
                 }
             }
         }
@@ -423,7 +426,7 @@ public class CallerInfoAsyncQuery {
      */
     public void addQueryListener(int token, OnQueryCompleteListener listener, Object cookie) {
 
-        if (DBG) Rlog.d(LOG_TAG, "adding listener to query: " + sanitizeUriToString(mHandler.mQueryUri) +
+        if (DBG) Log.d(LOG_TAG, "adding listener to query: " + sanitizeUriToString(mHandler.mQueryUri) +
                 " handler: " + mHandler.toString());
 
         //create cookieWrapper, add query request to end of queue.

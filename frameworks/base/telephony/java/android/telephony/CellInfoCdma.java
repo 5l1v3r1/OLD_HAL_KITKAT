@@ -18,7 +18,7 @@ package android.telephony;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.telephony.Rlog;
+import android.util.Log;
 
 /**
  * Immutable cell information from a point in time.
@@ -87,11 +87,10 @@ public final class CellInfoCdma extends CellInfo implements Parcelable {
     public String toString() {
         StringBuffer sb = new StringBuffer();
 
-        sb.append("CellInfoCdma:{");
+        sb.append("CellInfoCdma:");
         sb.append(super.toString());
-        sb.append(" ").append(mCellIdentityCdma);
-        sb.append(" ").append(mCellSignalStrengthCdma);
-        sb.append("}");
+        sb.append(", ").append(mCellIdentityCdma);
+        sb.append(", ").append(mCellSignalStrengthCdma);
 
         return sb.toString();
     }
@@ -144,6 +143,6 @@ public final class CellInfoCdma extends CellInfo implements Parcelable {
      * log
      */
     private static void log(String s) {
-        Rlog.w(LOG_TAG, s);
+        Log.w(LOG_TAG, s);
     }
 }

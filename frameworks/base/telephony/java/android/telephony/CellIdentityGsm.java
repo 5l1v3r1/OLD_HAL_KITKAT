@@ -18,10 +18,10 @@ package android.telephony;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.telephony.Rlog;
+import android.util.Log;
 
 /**
- * CellIdentity to represent a unique GSM cell
+ * CellIdentity to represent a unique GSM or UMTS cell
  */
 public final class CellIdentityGsm implements Parcelable {
 
@@ -35,7 +35,10 @@ public final class CellIdentityGsm implements Parcelable {
     // 16-bit Location Area Code, 0..65535
     private final int mLac;
     // 16-bit GSM Cell Identity described in TS 27.007, 0..65535
+    // 28-bit UMTS Cell Identity described in TS 25.331, 0..268435455
     private final int mCid;
+    // 9-bit UMTS Primary Scrambling Code described in TS 25.331, 0..511
+    private final int mPsc;
 
     /**
      * @hide
@@ -45,6 +48,7 @@ public final class CellIdentityGsm implements Parcelable {
         mMnc = Integer.MAX_VALUE;
         mLac = Integer.MAX_VALUE;
         mCid = Integer.MAX_VALUE;
+        mPsc = Integer.MAX_VALUE;
     }
     /**
      * public constructor
@@ -52,14 +56,16 @@ public final class CellIdentityGsm implements Parcelable {
      * @param mnc 2 or 3-digit Mobile Network Code, 0..999
      * @param lac 16-bit Location Area Code, 0..65535
      * @param cid 16-bit GSM Cell Identity or 28-bit UMTS Cell Identity
+     * @param psc 9-bit UMTS Primary Scrambling Code
      *
      * @hide
      */
-    public CellIdentityGsm (int mcc, int mnc, int lac, int cid) {
+    public CellIdentityGsm (int mcc, int mnc, int lac, int cid, int psc) {
         mMcc = mcc;
         mMnc = mnc;
         mLac = lac;
         mCid = cid;
+        mPsc = psc;
     }
 
     private CellIdentityGsm(CellIdentityGsm cid) {
@@ -67,6 +73,7 @@ public final class CellIdentityGsm implements Parcelable {
         mMnc = cid.mMnc;
         mLac = cid.mLac;
         mCid = cid.mCid;
+        mPsc = cid.mPsc;
     }
 
     CellIdentityGsm copy() {
@@ -74,21 +81,21 @@ public final class CellIdentityGsm implements Parcelable {
     }
 
     /**
-     * @return 3-digit Mobile Country Code, 0..999, Integer.MAX_VALUE if unknown
+     * @return 3-digit Mobile Country Code, 0..999
      */
     public int getMcc() {
         return mMcc;
     }
 
     /**
-     * @return 2 or 3-digit Mobile Network Code, 0..999, Integer.MAX_VALUE if unknown
+     * @return 2 or 3-digit Mobile Network Code, 0..999
      */
     public int getMnc() {
         return mMnc;
     }
 
     /**
-     * @return 16-bit Location Area Code, 0..65535, Integer.MAX_VALUE if unknown
+     * @return 16-bit Location Area Code, 0..65535
      */
     public int getLac() {
         return mLac;
@@ -97,24 +104,27 @@ public final class CellIdentityGsm implements Parcelable {
     /**
      * @return CID
      * Either 16-bit GSM Cell Identity described
-     * in TS 27.007, 0..65535, Integer.MAX_VALUE if unknown
+     * in TS 27.007, 0..65535
+     * or 28-bit UMTS Cell Identity described
+     * in TS 25.331, 0..268435455
      */
     public int getCid() {
         return mCid;
     }
 
     /**
-     * @return Integer.MAX_VALUE, undefined for GSM
+     * @return 9-bit UMTS Primary Scrambling Code described in
+     * TS 25.331, 0..511
      */
-    @Deprecated
     public int getPsc() {
-        return Integer.MAX_VALUE;
+        return mPsc;
     }
 
     @Override
     public int hashCode() {
         int primeNum = 31;
-        return (mMcc * primeNum) + (mMnc * primeNum) + (mLac * primeNum) + (mCid * primeNum);
+        return (mMcc * primeNum) + (mMnc * primeNum) + (mLac * primeNum) + (mCid * primeNum) +
+                (mPsc * primeNum);
     }
 
     @Override
@@ -125,7 +135,8 @@ public final class CellIdentityGsm implements Parcelable {
                 return mMcc == o.mMcc &&
                         mMnc == o.mMnc &&
                         mLac == o.mLac &&
-                        mCid == o.mCid;
+                        mCid == o.mCid &&
+                        mPsc == o.mPsc;
             } catch (ClassCastException e) {
                 return false;
             }
@@ -136,12 +147,13 @@ public final class CellIdentityGsm implements Parcelable {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("CellIdentityGsm:{");
+        StringBuilder sb = new StringBuilder("GsmCellIdentitiy:");
+        sb.append(super.toString());
         sb.append(" mMcc=").append(mMcc);
-        sb.append(" mMnc=").append(mMnc);
+        sb.append(" mMnc=").append(mMcc);
         sb.append(" mLac=").append(mLac);
         sb.append(" mCid=").append(mCid);
-        sb.append("}");
+        sb.append(" mPsc=").append(mPsc);
 
         return sb.toString();
     }
@@ -160,6 +172,7 @@ public final class CellIdentityGsm implements Parcelable {
         dest.writeInt(mMnc);
         dest.writeInt(mLac);
         dest.writeInt(mCid);
+        dest.writeInt(mPsc);
     }
 
     /** Construct from Parcel, type has already been processed */
@@ -168,6 +181,7 @@ public final class CellIdentityGsm implements Parcelable {
         mMnc = in.readInt();
         mLac = in.readInt();
         mCid = in.readInt();
+        mPsc = in.readInt();
         if (DBG) log("CellIdentityGsm(Parcel): " + toString());
     }
 
@@ -190,6 +204,6 @@ public final class CellIdentityGsm implements Parcelable {
      * log
      */
     private static void log(String s) {
-        Rlog.w(LOG_TAG, s);
+        Log.w(LOG_TAG, s);
     }
 }
