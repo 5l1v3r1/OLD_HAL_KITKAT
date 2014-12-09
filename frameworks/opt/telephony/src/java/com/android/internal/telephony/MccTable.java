@@ -106,7 +106,7 @@ public final class MccTable
             } else {
                 locale = new Locale(entry.language, entry.iso);
             }
-            String[] tz = TimeZones.forLocale(locale);
+            String[] tz = TimeZoneNames.forLocale(locale);
             if (tz.length == 0) return null;
             return tz[0];
         }
