@@ -31,7 +31,8 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
-import libcore.icu.TimeZones;
+//import libcore.icu.TimeZones;
+import libcore.icu.TimeZoneNames;
 
 /**
  * Mobile Country Code

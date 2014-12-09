@@ -441,8 +441,8 @@ non_base_dirs := \
 	../opt/telephony/src/java/android/provider \
 	../opt/telephony/src/java/android/telephony \
 	../opt/telephony/src/java/android/telephony/gsm \
-	../opt/net/voip/src/java/android/net/rtp \
-	../opt/net/voip/src/java/android/net/sip
+	../opt/net/voip/src/java/android/net/rtp
+#	../opt/net/voip/src/java/android/net/sip
 
 # These are relative to frameworks/base
 dirs_to_check_apis := \

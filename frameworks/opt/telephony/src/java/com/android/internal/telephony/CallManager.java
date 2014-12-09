@@ -16,7 +16,7 @@
 
 package com.android.internal.telephony;
 
-import com.android.internal.telephony.sip.SipPhone;
+//import com.android.internal.telephony.sip.SipPhone;
 
 import android.content.Context;
 import android.media.AudioManager;
@@ -396,10 +396,10 @@ public final class CallManager {
                 }
 
                 int newAudioMode = AudioManager.MODE_IN_CALL;
-                if (offhookPhone instanceof SipPhone) {
+                /*if (offhookPhone instanceof SipPhone) {
                     // enable IN_COMMUNICATION audio mode instead for sipPhone
                     newAudioMode = AudioManager.MODE_IN_COMMUNICATION;
-                }
+                }*/
                 if (audioManager.getMode() != newAudioMode) {
                     // request audio focus before setting the new mode
                     if (VDBG) Log.d(LOG_TAG, "requestAudioFocus on STREAM_VOICE_CALL");
@@ -686,9 +686,9 @@ public final class CallManager {
 
 
         Phone fgPhone = getFgPhone();
-        if (fgPhone instanceof SipPhone) {
+        /*if (fgPhone instanceof SipPhone) {
             ((SipPhone) fgPhone).conference(heldCall);
-        } else if (canConference(heldCall)) {
+        } else */if (canConference(heldCall)) {
             fgPhone.conference();
         } else {
             throw(new CallStateException("Can't conference foreground and selected background call"));

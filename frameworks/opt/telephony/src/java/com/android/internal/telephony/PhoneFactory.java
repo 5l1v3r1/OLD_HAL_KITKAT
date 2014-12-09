@@ -28,8 +28,8 @@ import com.android.internal.telephony.cdma.CDMAPhone;
 import com.android.internal.telephony.cdma.CDMALTEPhone;
 import com.android.internal.telephony.cdma.CdmaSubscriptionSourceManager;
 import com.android.internal.telephony.gsm.GSMPhone;
-import com.android.internal.telephony.sip.SipPhone;
-import com.android.internal.telephony.sip.SipPhoneFactory;
+//import com.android.internal.telephony.sip.SipPhone;
+//import com.android.internal.telephony.sip.SipPhoneFactory;
 import com.android.internal.telephony.uicc.UiccController;
 
 /**
@@ -211,7 +211,7 @@ public class PhoneFactory {
      * @param sipUri the local SIP URI the phone runs on
      * @return the {@code SipPhone} object or null if the SIP URI is not valid
      */
-    public static SipPhone makeSipPhone(String sipUri) {
+    /*public static SipPhone makeSipPhone(String sipUri) {
         return SipPhoneFactory.makePhone(sipUri, sContext, sPhoneNotifier);
-    }
+    }*/
 }
