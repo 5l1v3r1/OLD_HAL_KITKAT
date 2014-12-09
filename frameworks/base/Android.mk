@@ -495,8 +495,8 @@ framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES := \
 	framework \
 	framework2 \
 	mms-common \
-	telephony-common \
-	voip-common
+	telephony-common
+#	voip-common
 
 framework_docs_LOCAL_JAVA_LIBRARIES := \
 	$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES) \

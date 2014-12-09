@@ -26,7 +26,7 @@ LOCAL_JNI_SHARED_LIBRARIES := librtp_jni
 LOCAL_REQUIRED_MODULES := librtp_jni
 
 LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE := voip-common
+LOCAL_MODULE := _voip-common
 
 include $(BUILD_JAVA_LIBRARY)
 
