@@ -33,12 +33,12 @@ import android.provider.Settings;
 import android.telephony.CellIdentityCdma;
 import android.telephony.CellIdentityGsm;
 import android.telephony.CellIdentityLte;
-import android.telephony.CellIdentityWcdma;
+//import android.telephony.CellIdentityWcdma;
 import android.telephony.CellInfo;
 import android.telephony.CellInfoCdma;
 import android.telephony.CellInfoGsm;
 import android.telephony.CellInfoLte;
-import android.telephony.CellInfoWcdma;
+//import android.telephony.CellInfoWcdma;
 import android.telephony.TelephonyManager;
 
 import com.android.internal.util.State;
@@ -483,10 +483,10 @@ public class CaptivePortalTracker extends StateMachine {
                         } else if (cellInfo instanceof CellInfoLte) {
                             CellIdentityLte cellId = ((CellInfoLte) cellInfo).getCellIdentity();
                             latencyBroadcast.putExtra(EXTRA_CELL_ID, cellId);
-                        } else if (cellInfo instanceof CellInfoWcdma) {
+                        } /*else if (cellInfo instanceof CellInfoWcdma) {
                             CellIdentityWcdma cellId = ((CellInfoWcdma) cellInfo).getCellIdentity();
                             latencyBroadcast.putExtra(EXTRA_CELL_ID, cellId);
-                        } else {
+                        } */else {
                             if (DBG) logw("Registered cellinfo is unrecognized");
                             return;
                         }
