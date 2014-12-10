@@ -407,8 +407,7 @@ public class NetworkController extends BroadcastReceiver implements DemoMode {
         @Override
         public void onServiceStateChanged(ServiceState state) {
             if (DEBUG) {
-                Log.d(TAG, "onServiceStateChanged voiceState=" + state.getVoiceRegState()
-                        + " dataState=" + state.getDataRegState());
+                Slog.d(TAG, "onServiceStateChanged state=" + state.getState());
             }
             mServiceState = state;
             updateTelephonySignalStrength();
@@ -481,7 +480,7 @@ public class NetworkController extends BroadcastReceiver implements DemoMode {
     private boolean isCdma() {
         return (mSignalStrength != null) && !mSignalStrength.isGsm();
     }
-
+/*
     private boolean hasService() {
         if (mServiceState != null) {
             // Consider the device to be in service if either voice or data service is available.
@@ -494,6 +493,20 @@ public class NetworkController extends BroadcastReceiver implements DemoMode {
                 case ServiceState.STATE_OUT_OF_SERVICE:
                 case ServiceState.STATE_EMERGENCY_ONLY:
                     return mServiceState.getDataRegState() == ServiceState.STATE_IN_SERVICE;
+                default:
+                    return true;
+            }
+        } else {
+            return false;
+        }
+    }
+*/
+    private boolean hasService() {
+        if (mServiceState != null) {
+            switch (mServiceState.getState()) {
+                case ServiceState.STATE_OUT_OF_SERVICE:
+                case ServiceState.STATE_POWER_OFF:
+                    return false;
                 default:
                     return true;
             }
