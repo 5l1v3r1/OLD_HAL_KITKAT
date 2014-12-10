@@ -118,7 +118,7 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.XmlUtils;
 import com.android.server.am.BatteryStatsService;
-import com.android.server.connectivity.DataConnectionStats;
+//import com.android.server.connectivity.DataConnectionStats;
 import com.android.server.connectivity.Nat464Xlat;
 import com.android.server.connectivity.PacManager;
 import com.android.server.connectivity.Tethering;
@@ -434,7 +434,7 @@ public class ConnectivityService extends IConnectivityManager.Stub {
     // the set of network types that can only be enabled by system/sig apps
     List mProtectedNetworks;
 
-    private DataConnectionStats mDataConnectionStats;
+//    private DataConnectionStats mDataConnectionStats;
 
     private AtomicInteger mEnableFailFastMobileDataTag = new AtomicInteger(0);
 
@@ -669,8 +669,8 @@ public class ConnectivityService extends IConnectivityManager.Stub {
         mSettingsObserver = new SettingsObserver(mHandler, EVENT_APPLY_GLOBAL_HTTP_PROXY);
         mSettingsObserver.observe(mContext);
 
-        mDataConnectionStats = new DataConnectionStats(mContext);
-        mDataConnectionStats.startMonitoring();
+        //mDataConnectionStats = new DataConnectionStats(mContext);
+        //mDataConnectionStats.startMonitoring();
 
         // start network sampling ..
         Intent intent = new Intent(ACTION_PKT_CNT_SAMPLE_INTERVAL_ELAPSED, null);
