@@ -15,7 +15,7 @@ LOCAL_SRC_FILES += \
         src/com/android/phone/INetworkQueryService.aidl \
         src/com/android/phone/INetworkQueryServiceCallback.aidl
 
-LOCAL_PACKAGE_NAME := TeleService
+LOCAL_PACKAGE_NAME := _TeleService
 
 LOCAL_CERTIFICATE := platform
 LOCAL_PRIVILEGED_MODULE := true
