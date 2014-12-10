@@ -186,10 +186,6 @@ public class SearchIndexManager {
             mSbTokens.append(token);
         }
 
-        public void appendNameFromColumn(String columnName) {
-            appendName(getString(columnName));
-        }
-
         public void appendName(String name) {
             if (TextUtils.isEmpty(name)) {
                 return;
@@ -275,7 +271,7 @@ public class SearchIndexManager {
         final long start = SystemClock.elapsedRealtime();
         int count = 0;
         try {
-            mDbHelper.createSearchIndexTable(db, true);
+            mDbHelper.createSearchIndexTable(db);
             count = buildAndInsertIndex(db, null);
         } finally {
             mContactsProvider.setProviderStatus(ProviderStatus.STATUS_NORMAL);

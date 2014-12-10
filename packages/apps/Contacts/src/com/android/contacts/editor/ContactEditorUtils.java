@@ -26,10 +26,10 @@ import android.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.android.contacts.common.test.NeededForTesting;
-import com.android.contacts.common.model.AccountTypeManager;
-import com.android.contacts.common.model.account.AccountType;
-import com.android.contacts.common.model.account.AccountWithDataSet;
+import com.android.contacts.model.AccountTypeManager;
+import com.android.contacts.model.account.AccountType;
+import com.android.contacts.model.account.AccountWithDataSet;
+import com.android.contacts.test.NeededForTesting;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
@@ -70,7 +70,7 @@ public class ContactEditorUtils {
 
     public static synchronized ContactEditorUtils getInstance(Context context) {
         if (sInstance == null) {
-            sInstance = new ContactEditorUtils(context.getApplicationContext());
+            sInstance = new ContactEditorUtils(context);
         }
         return sInstance;
     }

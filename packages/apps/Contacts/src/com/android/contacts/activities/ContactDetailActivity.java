@@ -46,14 +46,17 @@ import com.android.contacts.detail.ContactDetailLayoutController;
 import com.android.contacts.detail.ContactLoaderFragment;
 import com.android.contacts.detail.ContactLoaderFragment.ContactLoaderFragmentListener;
 import com.android.contacts.interactions.ContactDeletionInteraction;
-import com.android.contacts.common.model.Contact;
-import com.android.contacts.common.model.account.AccountWithDataSet;
+import com.android.contacts.model.Contact;
+import com.android.contacts.model.account.AccountWithDataSet;
 import com.android.contacts.util.PhoneCapabilityTester;
 
 import java.util.ArrayList;
 
 public class ContactDetailActivity extends ContactsActivity {
     private static final String TAG = "ContactDetailActivity";
+
+    /** Shows a toogle button for hiding/showing updates. Don't submit with true */
+    private static final boolean DEBUG_TRANSITIONS = false;
 
     private Contact mContactData;
     private Uri mLookupUri;
@@ -78,12 +81,14 @@ public class ContactDetailActivity extends ContactsActivity {
             // can freely navigate the app (this is different from phones, where only the UP button
             // kicks the user into the full app)
             if (shouldUpRecreateTask(intent)) {
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK |
+                        Intent.FLAG_ACTIVITY_TASK_ON_HOME);
             } else {
                 intent.setFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS |
                         Intent.FLAG_ACTIVITY_FORWARD_RESULT | Intent.FLAG_ACTIVITY_SINGLE_TOP |
                         Intent.FLAG_ACTIVITY_CLEAR_TOP);
             }
+
             intent.setClass(this, PeopleActivity.class);
             startActivity(intent);
             finish();
@@ -105,6 +110,8 @@ public class ContactDetailActivity extends ContactsActivity {
                     | ActionBar.DISPLAY_SHOW_HOME);
             actionBar.setTitle("");
         }
+
+        Log.i(TAG, getIntent().getData().toString());
     }
 
     @Override
@@ -121,6 +128,19 @@ public class ContactDetailActivity extends ContactsActivity {
         super.onCreateOptionsMenu(menu);
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.star, menu);
+        if (DEBUG_TRANSITIONS) {
+            final MenuItem toggleSocial =
+                    menu.add(mLoaderFragment.getLoadStreamItems() ? "less" : "more");
+            toggleSocial.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+            toggleSocial.setOnMenuItemClickListener(new OnMenuItemClickListener() {
+                @Override
+                public boolean onMenuItemClick(MenuItem item) {
+                    mLoaderFragment.toggleLoadStreamItems();
+                    invalidateOptionsMenu();
+                    return false;
+                }
+            });
+        }
         return true;
     }
 
@@ -240,23 +260,12 @@ public class ContactDetailActivity extends ContactsActivity {
         actionBar.setTitle(displayName);
         actionBar.setSubtitle(company);
 
-        final StringBuilder talkback = new StringBuilder();
         if (!TextUtils.isEmpty(displayName)) {
-            talkback.append(displayName);
-        }
-        if (!TextUtils.isEmpty(company)) {
-            if (talkback.length() != 0) {
-                talkback.append(", ");
-            }
-            talkback.append(company);
-        }
-
-        if (talkback.length() != 0) {
             AccessibilityManager accessibilityManager =
                     (AccessibilityManager) this.getSystemService(Context.ACCESSIBILITY_SERVICE);
             if (accessibilityManager.isEnabled()) {
                 View decorView = getWindow().getDecorView();
-                decorView.setContentDescription(talkback);
+                decorView.setContentDescription(displayName);
                 decorView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
             }
         }

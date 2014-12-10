@@ -25,10 +25,10 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.ImageView;
 
-import com.android.contacts.common.ContactPhotoManager;
+import com.android.contacts.ContactPhotoManager;
 import com.android.contacts.activities.PhotoSelectionActivity;
-import com.android.contacts.common.model.Contact;
-import com.android.contacts.common.model.RawContactDeltaList;
+import com.android.contacts.model.Contact;
+import com.android.contacts.model.RawContactDeltaList;
 import com.android.contacts.util.ImageViewDrawableSetter;
 
 /**
@@ -38,7 +38,8 @@ import com.android.contacts.util.ImageViewDrawableSetter;
 public class ContactDetailPhotoSetter extends ImageViewDrawableSetter {
     public OnClickListener setupContactPhotoForClick(Context context, Contact contactData,
             ImageView photoView, boolean expandPhotoOnClick) {
-        Bitmap bitmap = setupContactPhoto(contactData, photoView);
+        setTarget(photoView);
+        Bitmap bitmap = setCompressedImage(contactData.getPhotoBinaryData());
         return setupClickListener(context, contactData, bitmap, expandPhotoOnClick);
     }
 

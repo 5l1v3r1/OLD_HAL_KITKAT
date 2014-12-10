@@ -31,7 +31,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:paddingLeft="?attr/list_item_padding_left"
-    android:paddingStart="?attr/list_item_padding_left"
+    android:paddingTop="?attr/list_item_padding_top"
+    android:paddingBottom="?attr/list_item_padding_bottom"
     android:minHeight="@dimen/detail_min_line_item_height" >
 
     <View
@@ -39,8 +40,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dip"
         android:layout_marginRight="?attr/list_item_padding_right"
-        android:layout_marginEnd="?attr/list_item_padding_right"
-        android:background="@color/secondary_header_separator_color" />
+        android:background="?android:attr/listDivider" />
 
     <include
         android:id="@+id/group_list_header"
@@ -52,7 +52,6 @@
         android:layout_height="wrap_content"
         android:paddingTop="8dip"
         android:paddingLeft="8dip"
-        android:paddingStart="8dip"
         android:paddingBottom="8dip"
         android:orientation="vertical"
         android:duplicateParentState="true"

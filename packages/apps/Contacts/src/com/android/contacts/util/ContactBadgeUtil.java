@@ -26,8 +26,7 @@ import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.Log;
 
-import com.android.contacts.common.ContactPhotoManager;
-import com.android.contacts.util.StreamItemEntry;
+import com.android.contacts.ContactPhotoManager;
 import com.android.contacts.R;
 
 /**
@@ -110,6 +109,6 @@ public class ContactBadgeUtil {
 
     public static Bitmap loadDefaultAvatarPhoto(Context context, boolean hires, boolean darkTheme) {
         return BitmapFactory.decodeResource(context.getResources(),
-                R.drawable.ic_contacts_holo_dark);
+                ContactPhotoManager.getDefaultAvatarResId(hires, darkTheme));
     }
 }

@@ -24,18 +24,15 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.media.Ringtone;
-import android.media.RingtoneManager;
-import android.net.Uri;
 import android.os.Bundle;
 import android.preference.CheckBoxPreference;
+import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceChangeListener;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
-import android.preference.RingtonePreference;
 import android.provider.SearchRecentSuggestions;
 import android.text.TextUtils;
 import android.view.Menu;
@@ -71,15 +68,6 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     // Menu entries
     private static final int MENU_RESTORE_DEFAULTS    = 1;
 
-    // Preferences for enabling and disabling SMS
-    private Preference mSmsDisabledPref;
-    private Preference mSmsEnabledPref;
-
-    private PreferenceCategory mStoragePrefCategory;
-    private PreferenceCategory mSmsPrefCategory;
-    private PreferenceCategory mMmsPrefCategory;
-    private PreferenceCategory mNotificationPrefCategory;
-
     private Preference mSmsLimitPref;
     private Preference mSmsDeliveryReportPref;
     private Preference mMmsLimitPref;
@@ -88,17 +76,14 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     private Preference mMmsReadReportPref;
     private Preference mManageSimPref;
     private Preference mClearHistoryPref;
-    private CheckBoxPreference mVibratePref;
+    private ListPreference mVibrateWhenPref;
     private CheckBoxPreference mEnableNotificationsPref;
     private CheckBoxPreference mMmsAutoRetrievialPref;
-    private RingtonePreference mRingtonePref;
     private Recycler mSmsRecycler;
     private Recycler mMmsRecycler;
     private static final int CONFIRM_CLEAR_SEARCH_HISTORY_DIALOG = 3;
-
-    // Whether or not we are currently enabled for SMS. This field is updated in onResume to make
-    // sure we notice if the user has changed the default SMS app.
-    private boolean mIsSmsEnabled;
+    private CharSequence[] mVibrateEntries;
+    private CharSequence[] mVibrateValues;
 
     @Override
     protected void onCreate(Bundle icicle) {
@@ -113,48 +98,15 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     @Override
     protected void onResume() {
         super.onResume();
-        boolean isSmsEnabled = MmsConfig.isSmsEnabled(this);
-        if (isSmsEnabled != mIsSmsEnabled) {
-            mIsSmsEnabled = isSmsEnabled;
-            invalidateOptionsMenu();
-        }
 
         // Since the enabled notifications pref can be changed outside of this activity,
         // we have to reload it whenever we resume.
         setEnabledNotificationsPref();
         registerListeners();
-        updateSmsEnabledState();
-    }
-
-    private void updateSmsEnabledState() {
-        // Show the right pref (SMS Disabled or SMS Enabled)
-        PreferenceScreen prefRoot = (PreferenceScreen)findPreference("pref_key_root");
-        if (!mIsSmsEnabled) {
-            prefRoot.addPreference(mSmsDisabledPref);
-            prefRoot.removePreference(mSmsEnabledPref);
-        } else {
-            prefRoot.removePreference(mSmsDisabledPref);
-            prefRoot.addPreference(mSmsEnabledPref);
-        }
-
-        // Enable or Disable the settings as appropriate
-        mStoragePrefCategory.setEnabled(mIsSmsEnabled);
-        mSmsPrefCategory.setEnabled(mIsSmsEnabled);
-        mMmsPrefCategory.setEnabled(mIsSmsEnabled);
-        mNotificationPrefCategory.setEnabled(mIsSmsEnabled);
     }
 
     private void loadPrefs() {
         addPreferencesFromResource(R.xml.preferences);
-
-        mSmsDisabledPref = findPreference("pref_key_sms_disabled");
-        mSmsEnabledPref = findPreference("pref_key_sms_enabled");
-
-        mStoragePrefCategory = (PreferenceCategory)findPreference("pref_key_storage_settings");
-        mSmsPrefCategory = (PreferenceCategory)findPreference("pref_key_sms_settings");
-        mMmsPrefCategory = (PreferenceCategory)findPreference("pref_key_mms_settings");
-        mNotificationPrefCategory =
-                (PreferenceCategory)findPreference("pref_key_notification_settings");
 
         mManageSimPref = findPreference("pref_key_manage_sim_messages");
         mSmsLimitPref = findPreference("pref_key_sms_delete_limit");
@@ -166,8 +118,10 @@ public class MessagingPreferenceActivity extends PreferenceActivity
         mClearHistoryPref = findPreference("pref_key_mms_clear_history");
         mEnableNotificationsPref = (CheckBoxPreference) findPreference(NOTIFICATION_ENABLED);
         mMmsAutoRetrievialPref = (CheckBoxPreference) findPreference(AUTO_RETRIEVAL);
-        mVibratePref = (CheckBoxPreference) findPreference(NOTIFICATION_VIBRATE);
-        mRingtonePref = (RingtonePreference) findPreference(NOTIFICATION_RINGTONE);
+        mVibrateWhenPref = (ListPreference) findPreference(NOTIFICATION_VIBRATE_WHEN);
+
+        mVibrateEntries = getResources().getTextArray(R.array.prefEntries_vibrateWhen);
+        mVibrateValues = getResources().getTextArray(R.array.prefValues_vibrateWhen);
 
         setMessagePreferences();
     }
@@ -176,7 +130,6 @@ public class MessagingPreferenceActivity extends PreferenceActivity
         PreferenceManager.getDefaultSharedPreferences(this).edit().clear().apply();
         setPreferenceScreen(null);
         loadPrefs();
-        updateSmsEnabledState();
 
         // NOTE: After restoring preferences, the auto delete function (i.e. message recycler)
         // will be turned off by default. However, we really want the default to be turned on.
@@ -190,49 +143,55 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     private void setMessagePreferences() {
         if (!MmsApp.getApplication().getTelephonyManager().hasIccCard()) {
             // No SIM card, remove the SIM-related prefs
-            mSmsPrefCategory.removePreference(mManageSimPref);
+            PreferenceCategory smsCategory =
+                (PreferenceCategory)findPreference("pref_key_sms_settings");
+            smsCategory.removePreference(mManageSimPref);
         }
 
         if (!MmsConfig.getSMSDeliveryReportsEnabled()) {
-            mSmsPrefCategory.removePreference(mSmsDeliveryReportPref);
+            PreferenceCategory smsCategory =
+                (PreferenceCategory)findPreference("pref_key_sms_settings");
+            smsCategory.removePreference(mSmsDeliveryReportPref);
             if (!MmsApp.getApplication().getTelephonyManager().hasIccCard()) {
-                getPreferenceScreen().removePreference(mSmsPrefCategory);
+                getPreferenceScreen().removePreference(smsCategory);
             }
         }
 
         if (!MmsConfig.getMmsEnabled()) {
             // No Mms, remove all the mms-related preferences
-            getPreferenceScreen().removePreference(mMmsPrefCategory);
+            PreferenceCategory mmsOptions =
+                (PreferenceCategory)findPreference("pref_key_mms_settings");
+            getPreferenceScreen().removePreference(mmsOptions);
 
-            mStoragePrefCategory.removePreference(findPreference("pref_key_mms_delete_limit"));
+            PreferenceCategory storageOptions =
+                (PreferenceCategory)findPreference("pref_key_storage_settings");
+            storageOptions.removePreference(findPreference("pref_key_mms_delete_limit"));
         } else {
+            PreferenceCategory mmsOptions =
+                    (PreferenceCategory)findPreference("pref_key_mms_settings");
             if (!MmsConfig.getMMSDeliveryReportsEnabled()) {
-                mMmsPrefCategory.removePreference(mMmsDeliveryReportPref);
+                mmsOptions.removePreference(mMmsDeliveryReportPref);
             }
             if (!MmsConfig.getMMSReadReportsEnabled()) {
-                mMmsPrefCategory.removePreference(mMmsReadReportPref);
+                mmsOptions.removePreference(mMmsReadReportPref);
             }
             // If the phone's SIM doesn't know it's own number, disable group mms.
             if (!MmsConfig.getGroupMmsEnabled() ||
                     TextUtils.isEmpty(MessageUtils.getLocalNumber())) {
-                mMmsPrefCategory.removePreference(mMmsGroupMmsPref);
+                mmsOptions.removePreference(mMmsGroupMmsPref);
             }
         }
 
         setEnabledNotificationsPref();
 
-        // If needed, migrate vibration setting from the previous tri-state setting stored in
-        // NOTIFICATION_VIBRATE_WHEN to the boolean setting stored in NOTIFICATION_VIBRATE.
+        // If needed, migrate vibration setting from a previous version
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
-        if (sharedPreferences.contains(NOTIFICATION_VIBRATE_WHEN)) {
-            String vibrateWhen = sharedPreferences.
-                    getString(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_WHEN, null);
-            boolean vibrate = "always".equals(vibrateWhen);
-            SharedPreferences.Editor prefsEditor = sharedPreferences.edit();
-            prefsEditor.putBoolean(NOTIFICATION_VIBRATE, vibrate);
-            prefsEditor.remove(NOTIFICATION_VIBRATE_WHEN);  // remove obsolete setting
-            prefsEditor.apply();
-            mVibratePref.setChecked(vibrate);
+        if (!sharedPreferences.contains(NOTIFICATION_VIBRATE_WHEN) &&
+                sharedPreferences.contains(NOTIFICATION_VIBRATE)) {
+            int stringId = sharedPreferences.getBoolean(NOTIFICATION_VIBRATE, false) ?
+                    R.string.prefDefault_vibrate_true :
+                    R.string.prefDefault_vibrate_false;
+            mVibrateWhenPref.setValue(getString(stringId));
         }
 
         mSmsRecycler = Recycler.getSmsRecycler();
@@ -242,15 +201,7 @@ public class MessagingPreferenceActivity extends PreferenceActivity
         setSmsDisplayLimit();
         setMmsDisplayLimit();
 
-        String soundValue = sharedPreferences.getString(NOTIFICATION_RINGTONE, null);
-        setRingtoneSummary(soundValue);
-    }
-
-    private void setRingtoneSummary(String soundValue) {
-        Uri soundUri = TextUtils.isEmpty(soundValue) ? null : Uri.parse(soundValue);
-        Ringtone tone = soundUri != null ? RingtoneManager.getRingtone(this, soundUri) : null;
-        mRingtonePref.setSummary(tone != null ? tone.getTitle(this)
-                : getResources().getString(R.string.silent_ringtone));
+        adjustVibrateSummary(mVibrateWhenPref.getValue());
     }
 
     private void setEnabledNotificationsPref() {
@@ -274,9 +225,7 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     public boolean onCreateOptionsMenu(Menu menu) {
         super.onCreateOptionsMenu(menu);
         menu.clear();
-        if (mIsSmsEnabled) {
-            menu.add(0, MENU_RESTORE_DEFAULTS, 0, R.string.restore_default);
-        }
+        menu.add(0, MENU_RESTORE_DEFAULTS, 0, R.string.restore_default);
         return true;
     }
 
@@ -396,16 +345,27 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     }
 
     private void registerListeners() {
-        mRingtonePref.setOnPreferenceChangeListener(this);
+        mVibrateWhenPref.setOnPreferenceChangeListener(this);
     }
 
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         boolean result = false;
-        if (preference == mRingtonePref) {
-            setRingtoneSummary((String)newValue);
+        if (preference == mVibrateWhenPref) {
+            adjustVibrateSummary((String)newValue);
             result = true;
         }
         return result;
+    }
+
+    private void adjustVibrateSummary(String value) {
+        int len = mVibrateValues.length;
+        for (int i = 0; i < len; i++) {
+            if (mVibrateValues[i].equals(value)) {
+                mVibrateWhenPref.setSummary(mVibrateEntries[i]);
+                return;
+            }
+        }
+        mVibrateWhenPref.setSummary(null);
     }
 
     // For the group mms feature to be enabled, the following must be true:

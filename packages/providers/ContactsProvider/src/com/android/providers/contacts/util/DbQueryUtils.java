@@ -20,7 +20,6 @@ import android.database.DatabaseUtils;
 import android.text.TextUtils;
 
 import java.util.HashMap;
-import java.util.Set;
 
 /**
  * Static methods for helping us build database query selection strings.
@@ -84,52 +83,15 @@ public class DbQueryUtils {
     /**
      * Checks if the given ContentValues contains values within the projection
      * map.
-     *
      * @throws IllegalArgumentException if any value in values is not found in
      * the projection map.
      */
     public static void checkForSupportedColumns(HashMap<String, String> projectionMap,
             ContentValues values) {
-        checkForSupportedColumns(projectionMap.keySet(), values, "Is invalid.");
-    }
-
-    /**
-     * @see #checkForSupportedColumns(HashMap, ContentValues)
-     */
-    public static void checkForSupportedColumns(Set<String> allowedColumns, ContentValues values,
-            String msgSuffix) {
         for (String requestedColumn : values.keySet()) {
-            if (!allowedColumns.contains(requestedColumn)) {
-                throw new IllegalArgumentException("Column '" + requestedColumn + "'. " +
-                        msgSuffix);
+            if (!projectionMap.keySet().contains(requestedColumn)) {
+                throw new IllegalArgumentException("Column '" + requestedColumn + "' is invalid.");
             }
         }
     }
-
-    /**
-     * Escape values to be used in LIKE sqlite clause.
-     *
-     * The LIKE clause has two special characters: '%' and '_'.  If either of these
-     * characters need to be matched literally, then they must be escaped like so:
-     *
-     * WHERE value LIKE 'android\_%' ESCAPE '\'
-     *
-     * The ESCAPE clause is required and no default exists as the escape character in this context.
-     * Since the escape character needs to be defined as part of the sql string, it must be
-     * provided to this method so the escape characters match.
-     *
-     * @param sb The StringBuilder to append the escaped value to.
-     * @param value The value to be escaped.
-     * @param escapeChar The escape character to be defined in the sql ESCAPE clause.
-     */
-    public static void escapeLikeValue(StringBuilder sb, String value, char escapeChar) {
-        for (int i = 0; i < value.length(); i++) {
-            char ch = value.charAt(i);
-            if (ch == '%' || ch == '_') {
-                sb.append(escapeChar);
-            }
-            sb.append(ch);
-        }
-    }
-
 }

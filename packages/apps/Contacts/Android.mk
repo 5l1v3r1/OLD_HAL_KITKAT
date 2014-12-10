@@ -3,21 +3,11 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE_TAGS := optional
 
-contacts_common_dir := ../ContactsCommon
+LOCAL_SRC_FILES := $(call all-java-files-under, src)
 
-src_dirs := src $(contacts_common_dir)/src
-res_dirs := res $(contacts_common_dir)/res
-
-LOCAL_SRC_FILES := $(call all-java-files-under, $(src_dirs))
-LOCAL_RESOURCE_DIR := $(addprefix $(LOCAL_PATH)/, $(res_dirs))
-
-LOCAL_AAPT_FLAGS := \
-    --auto-add-overlay \
-    --extra-packages com.android.contacts.common
-
-LOCAL_JAVA_LIBRARIES := telephony-common voip-common
+LOCAL_JAVA_LIBRARIES := telephony-common
 LOCAL_STATIC_JAVA_LIBRARIES := \
-    com.android.phone.shared \
+    com.android.phone.common \
     com.android.vcard \
     android-common \
     guava \
@@ -29,7 +19,6 @@ LOCAL_REQUIRED_MODULES := libvariablespeed
 
 LOCAL_PACKAGE_NAME := Contacts
 LOCAL_CERTIFICATE := shared
-LOCAL_PRIVILEGED_MODULE := true
 
 LOCAL_PROGUARD_FLAG_FILES := proguard.flags
 

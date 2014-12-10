@@ -22,7 +22,6 @@ import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
-import android.os.CancellationSignal;
 import android.provider.ContactsContract.CommonDataKinds.Email;
 import android.provider.ContactsContract.CommonDataKinds.Organization;
 import android.provider.ContactsContract.CommonDataKinds.Phone;
@@ -179,8 +178,8 @@ public class GlobalSearchSupport {
         }
     }
 
-    public Cursor handleSearchSuggestionsQuery(SQLiteDatabase db, Uri uri, String[] projection,
-            String limit, CancellationSignal cancellationSignal) {
+    public Cursor handleSearchSuggestionsQuery(
+            SQLiteDatabase db, Uri uri, String[] projection, String limit) {
         final MatrixCursor cursor = new MatrixCursor(
                 projection == null ? SEARCH_SUGGESTIONS_COLUMNS : projection);
 
@@ -190,7 +189,7 @@ public class GlobalSearchSupport {
             String selection = null;
             String searchClause = uri.getLastPathSegment();
             addSearchSuggestionsBasedOnFilter(
-                    cursor, db, projection, selection, searchClause, limit, cancellationSignal);
+                    cursor, db, projection, selection, searchClause, limit);
         }
 
         return cursor;
@@ -207,7 +206,7 @@ public class GlobalSearchSupport {
      * instead of the lookup key.
      */
     public Cursor handleSearchShortcutRefresh(SQLiteDatabase db, String[] projection,
-            String lookupKey, String filter, CancellationSignal cancellationSignal) {
+            String lookupKey, String filter) {
         long contactId;
         try {
             contactId = mContactsProvider.lookupContactIdByLookupKey(db, lookupKey);
@@ -217,13 +216,11 @@ public class GlobalSearchSupport {
         MatrixCursor cursor = new MatrixCursor(
                 projection == null ? SEARCH_SUGGESTIONS_COLUMNS : projection);
         return addSearchSuggestionsBasedOnFilter(cursor,
-                db, projection, ContactsColumns.CONCRETE_ID + "=" + contactId, filter, null,
-                cancellationSignal);
+                db, projection, ContactsColumns.CONCRETE_ID + "=" + contactId, filter, null);
     }
 
     private Cursor addSearchSuggestionsBasedOnFilter(MatrixCursor cursor, SQLiteDatabase db,
-            String[] projection, String selection, String filter, String limit,
-            CancellationSignal cancellationSignal) {
+            String[] projection, String selection, String filter, String limit) {
         StringBuilder sb = new StringBuilder();
         final boolean haveFilter = !TextUtils.isEmpty(filter);
         sb.append("SELECT "
@@ -250,7 +247,7 @@ public class GlobalSearchSupport {
         if (limit != null) {
             sb.append(" LIMIT " + limit);
         }
-        Cursor c = db.rawQuery(sb.toString(), null, cancellationSignal);
+        Cursor c = db.rawQuery(sb.toString(), null);
         SearchSuggestion suggestion = new SearchSuggestion();
         suggestion.filter = filter;
         try {

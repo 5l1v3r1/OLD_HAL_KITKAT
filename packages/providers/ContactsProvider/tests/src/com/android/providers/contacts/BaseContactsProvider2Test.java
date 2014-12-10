@@ -17,7 +17,6 @@
 package com.android.providers.contacts;
 
 import static com.android.providers.contacts.ContactsActor.PACKAGE_GREY;
-import static com.android.providers.contacts.TestUtils.cv;
 
 import android.accounts.Account;
 import android.content.ContentProvider;
@@ -29,6 +28,7 @@ import android.content.Entity;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
+import android.os.Bundle;
 import android.provider.BaseColumns;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.AggregationExceptions;
@@ -49,6 +49,7 @@ import android.provider.ContactsContract.Contacts;
 import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.Groups;
 import android.provider.ContactsContract.RawContacts;
+import android.provider.ContactsContract.SearchSnippetColumns;
 import android.provider.ContactsContract.Settings;
 import android.provider.ContactsContract.StatusUpdates;
 import android.provider.ContactsContract.StreamItems;
@@ -57,10 +58,6 @@ import android.test.mock.MockContentResolver;
 import android.util.Log;
 
 import com.android.providers.contacts.ContactsDatabaseHelper.Tables;
-import com.android.providers.contacts.testutil.CommonDatabaseUtils;
-import com.android.providers.contacts.testutil.DataUtil;
-import com.android.providers.contacts.testutil.RawContactUtil;
-import com.android.providers.contacts.testutil.TestUtil;
 import com.android.providers.contacts.util.Hex;
 import com.android.providers.contacts.util.MockClock;
 import com.google.android.collect.Sets;
@@ -153,6 +150,38 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
         return mActor.provider;
     }
 
+    protected Uri maybeAddAccountQueryParameters(Uri uri, Account account) {
+        if (account == null) {
+            return uri;
+        }
+        return uri.buildUpon()
+                .appendQueryParameter(RawContacts.ACCOUNT_NAME, account.name)
+                .appendQueryParameter(RawContacts.ACCOUNT_TYPE, account.type)
+                .build();
+    }
+
+    protected long createRawContact() {
+        return createRawContact(null);
+    }
+
+    protected long createRawContactWithName() {
+        return createRawContactWithName(null);
+    }
+
+    protected long createRawContactWithName(Account account) {
+        return createRawContactWithName("John", "Doe", account);
+    }
+
+    protected long createRawContactWithName(String firstName, String lastName) {
+        return createRawContactWithName(firstName, lastName, null);
+    }
+
+    protected long createRawContactWithName(String firstName, String lastName, Account account) {
+        long rawContactId = createRawContact(account);
+        insertStructuredName(rawContactId, firstName, lastName);
+        return rawContactId;
+    }
+
     protected Uri setCallerIsSyncAdapter(Uri uri, Account account) {
         if (account == null) {
             return uri;
@@ -164,6 +193,14 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
         return builder.build();
     }
 
+    protected long createRawContact(Account account, String... extras) {
+        ContentValues values = new ContentValues();
+        extrasVarArgsToValues(values, extras);
+        final Uri uri = maybeAddAccountQueryParameters(RawContacts.CONTENT_URI, account);
+        Uri contactUri = mResolver.insert(uri, values);
+        return ContentUris.parseId(contactUri);
+    }
+
     protected int updateItem(Uri uri, long id, String... extras) {
         Uri itemUri = ContentUris.withAppendedId(uri, id);
         return updateItem(itemUri, extras);
@@ -171,8 +208,15 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
 
     protected int updateItem(Uri uri, String... extras) {
         ContentValues values = new ContentValues();
-        CommonDatabaseUtils.extrasVarArgsToValues(values, extras);
+        extrasVarArgsToValues(values, extras);
         return mResolver.update(uri, values, null, null);
+    }
+
+    private static void extrasVarArgsToValues(ContentValues values, String... extras) {
+        for (int i = 0; i < extras.length; ) {
+            values.put(extras[i], extras[i + 1]);
+            i += 2;
+        }
     }
 
     protected long createGroup(Account account, String sourceId, String title) {
@@ -196,7 +240,7 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
         values.put(Groups.GROUP_VISIBLE, visible);
         values.put(Groups.AUTO_ADD, autoAdd ? 1 : 0);
         values.put(Groups.FAVORITES, favorite ? 1 : 0);
-        final Uri uri = TestUtil.maybeAddAccountQueryParameters(Groups.CONTENT_URI, account);
+        final Uri uri = maybeAddAccountQueryParameters(Groups.CONTENT_URI, account);
         return ContentUris.parseId(mResolver.insert(uri, values));
     }
 
@@ -216,6 +260,32 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
         values.put(Settings.SHOULD_SYNC, shouldSync);
         values.put(Settings.UNGROUPED_VISIBLE, ungroupedVisible);
         mResolver.insert(Settings.CONTENT_URI, values);
+    }
+
+    protected Uri insertStructuredName(long rawContactId, String givenName, String familyName) {
+        ContentValues values = new ContentValues();
+        StringBuilder sb = new StringBuilder();
+        if (givenName != null) {
+            sb.append(givenName);
+        }
+        if (givenName != null && familyName != null) {
+            sb.append(" ");
+        }
+        if (familyName != null) {
+            sb.append(familyName);
+        }
+        values.put(StructuredName.DISPLAY_NAME, sb.toString());
+        values.put(StructuredName.GIVEN_NAME, givenName);
+        values.put(StructuredName.FAMILY_NAME, familyName);
+
+        return insertStructuredName(rawContactId, values);
+    }
+
+    protected Uri insertStructuredName(long rawContactId, ContentValues values) {
+        values.put(Data.RAW_CONTACT_ID, rawContactId);
+        values.put(Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE);
+        Uri resultUri = mResolver.insert(Data.CONTENT_URI, values);
+        return resultUri;
     }
 
     protected Uri insertOrganization(long rawContactId, ContentValues values) {
@@ -265,18 +335,8 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
         return insertEmail(rawContactId, email, primary, Email.TYPE_HOME, null);
     }
 
-    protected Uri insertEmail(long rawContactId, String email, boolean primary,
-            boolean superPrimary) {
-        return insertEmail(rawContactId, email, primary, superPrimary, Email.TYPE_HOME, null);
-    }
-
     protected Uri insertEmail(long rawContactId, String email, boolean primary, int type,
             String label) {
-        return insertEmail(rawContactId, email, primary, false, type, label);
-    }
-
-    protected Uri insertEmail(long rawContactId, String email, boolean primary,
-            boolean superPrimary, int type,  String label) {
         ContentValues values = new ContentValues();
         values.put(Data.RAW_CONTACT_ID, rawContactId);
         values.put(Data.MIMETYPE, Email.CONTENT_ITEM_TYPE);
@@ -285,9 +345,6 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
         values.put(Email.LABEL, label);
         if (primary) {
             values.put(Data.IS_PRIMARY, 1);
-        }
-        if (superPrimary) {
-            values.put(Data.IS_SUPER_PRIMARY, 1);
         }
 
         Uri resultUri = mResolver.insert(Data.CONTENT_URI, values);
@@ -436,17 +493,21 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
 
     protected Uri insertStreamItem(long rawContactId, ContentValues values, Account account) {
         return mResolver.insert(
-                TestUtil.maybeAddAccountQueryParameters(Uri.withAppendedPath(
-                        ContentUris.withAppendedId(RawContacts.CONTENT_URI, rawContactId),
-                        RawContacts.StreamItems.CONTENT_DIRECTORY), account),
+                maybeAddAccountQueryParameters(
+                        Uri.withAppendedPath(
+                                ContentUris.withAppendedId(RawContacts.CONTENT_URI, rawContactId),
+                                RawContacts.StreamItems.CONTENT_DIRECTORY),
+                        account),
                 values);
     }
 
     protected Uri insertStreamItemPhoto(long streamItemId, ContentValues values, Account account) {
         return mResolver.insert(
-                TestUtil.maybeAddAccountQueryParameters(Uri.withAppendedPath(
-                        ContentUris.withAppendedId(StreamItems.CONTENT_URI, streamItemId),
-                        StreamItems.StreamItemPhotos.CONTENT_DIRECTORY), account),
+                maybeAddAccountQueryParameters(
+                        Uri.withAppendedPath(
+                                ContentUris.withAppendedId(StreamItems.CONTENT_URI, streamItemId),
+                                StreamItems.StreamItemPhotos.CONTENT_DIRECTORY),
+                        account),
                 values);
     }
 
@@ -837,10 +898,32 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
             assertEquals("Record count for " + uri, 1, c.getCount());
 
             if (c.moveToFirst()) {
-                value = c.getString(c.getColumnIndex(column));
+                value = getCursorStringValue(c, column);
             }
         } finally {
             c.close();
+        }
+        return value;
+    }
+
+    /**
+     * Retrieves the string value in the given column, handling deferred snippeting if the requested
+     * column is the snippet and the cursor specifies it.
+     */
+    protected String getCursorStringValue(Cursor c, String column) {
+        String value = c.getString(c.getColumnIndex(column));
+        if (SearchSnippetColumns.SNIPPET.equals(column)) {
+            Bundle extras = c.getExtras();
+            if (extras.containsKey(ContactsContract.DEFERRED_SNIPPETING)) {
+                String displayName = "No display name";
+                int displayNameColumnIndex = c.getColumnIndex(Contacts.DISPLAY_NAME);
+                if (displayNameColumnIndex != -1) {
+                    displayName = c.getString(displayNameColumnIndex);
+                }
+                String query = extras.getString(ContactsContract.DEFERRED_SNIPPETING_QUERY);
+                value = ContactsContract.snippetize(value, displayName, query,
+                        '[', ']', "...", 5);
+            }
         }
         return value;
     }
@@ -880,20 +963,6 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
             assertEquals("Record count", 1, c.getCount());
             c.moveToFirst();
             assertCursorValues(c, expectedValues);
-        } catch (Error e) {
-            TestUtils.dumpCursor(c);
-            throw e;
-        } finally {
-            c.close();
-        }
-    }
-
-    protected void assertContainsValues(Uri rowUri, ContentValues expectedValues) {
-        Cursor c = mResolver.query(rowUri, null, null, null, null);
-        try {
-            assertEquals("Record count", 1, c.getCount());
-            c.moveToFirst();
-            assertCursorValuesPartialMatch(c, expectedValues);
         } catch (Error e) {
             TestUtils.dumpCursor(c);
             throw e;
@@ -1030,28 +1099,6 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
         assertTrue(message.toString(), result);
     }
 
-    protected void assertCursorValuesPartialMatch(Cursor cursor, ContentValues expectedValues) {
-        StringBuilder message = new StringBuilder();
-        boolean result = expectedValuePartiallyMatches(cursor, expectedValues, message);
-        assertTrue(message.toString(), result);
-    }
-
-    protected void assertCursorHasAnyRecordMatch(Cursor cursor, ContentValues expectedValues) {
-        final StringBuilder message = new StringBuilder();
-        boolean found = false;
-        cursor.moveToPosition(-1);
-        while (cursor.moveToNext()) {
-            message.setLength(0);
-            final int pos = cursor.getPosition();
-            found = equalsWithExpectedValues(cursor, expectedValues, message);
-            if (found) {
-                break;
-            }
-        }
-        assertTrue("Expected values can not be found " + expectedValues + "," + message.toString(),
-                found);
-    }
-
     protected void assertCursorValues(Cursor cursor, ContentValues... expectedValues) {
         StringBuilder message = new StringBuilder();
 
@@ -1086,25 +1133,6 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
         }
     }
 
-    private boolean expectedValuePartiallyMatches(Cursor cursor, ContentValues expectedValues,
-            StringBuilder msgBuffer) {
-        for (String column : expectedValues.keySet()) {
-            int index = cursor.getColumnIndex(column);
-            if (index == -1) {
-                msgBuffer.append(" No such column: ").append(column);
-                return false;
-            }
-            String expectedValue = expectedValues.getAsString(column);
-            String value = cursor.getString(cursor.getColumnIndex(column));
-            if (value != null && !value.contains(expectedValue)) {
-                msgBuffer.append(" Column value ").append(column).append(" expected to contain <")
-                        .append(expectedValue).append(">, but was <").append(value).append('>');
-                return false;
-            }
-        }
-        return true;
-    }
-
     private boolean equalsWithExpectedValues(Cursor cursor, ContentValues expectedValues,
             StringBuilder msgBuffer) {
         for (String column : expectedValues.keySet()) {
@@ -1120,7 +1148,7 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
                 value = Hex.encodeHex(cursor.getBlob(index), false);
             } else {
                 expectedValue = expectedValues.getAsString(column);
-                value = cursor.getString(cursor.getColumnIndex(column));
+                value = getCursorStringValue(cursor, column);
             }
             if (expectedValue != null && !expectedValue.equals(value) || value != null
                     && !value.equals(expectedValue)) {
@@ -1136,21 +1164,6 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
             }
         }
         return true;
-    }
-
-    private static final String[] DATA_USAGE_PROJECTION =
-            new String[] {Data.DATA1, Data.TIMES_USED, Data.LAST_TIME_USED};
-
-    protected void assertDataUsageCursorContains(Uri uri, String data1, int timesUsed,
-            int lastTimeUsed) {
-        final Cursor cursor = mResolver.query(uri, DATA_USAGE_PROJECTION, null, null,
-                null);
-        try {
-            assertCursorHasAnyRecordMatch(cursor, cv(Data.DATA1, data1, Data.TIMES_USED, timesUsed,
-                    Data.LAST_TIME_USED, lastTimeUsed));
-        } finally {
-            cursor.close();
-        }
     }
 
     private String[] buildProjection(ContentValues values) {
@@ -1481,11 +1494,11 @@ public abstract class BaseContactsProvider2Test extends PhotoLoadingTestCase {
 
             final long groupId = createGroup(mAccount, "gsid1", "title1");
 
-            long rawContactId = RawContactUtil.createRawContact(mResolver);
+            long rawContactId = createRawContact();
             insertGroupMembership(rawContactId, groupId);
 
             if (givenName != null || familyName != null) {
-                DataUtil.insertStructuredName(mResolver, rawContactId, givenName, familyName);
+                insertStructuredName(rawContactId, givenName, familyName);
             }
             if (nickname != null) {
                 insertNickname(rawContactId, nickname);

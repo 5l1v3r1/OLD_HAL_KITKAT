@@ -40,22 +40,18 @@ import android.provider.ContactsContract.CommonDataKinds.GroupMembership;
 import android.provider.ContactsContract.Contacts;
 import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.Groups;
-import android.provider.ContactsContract.PinnedPositions;
 import android.provider.ContactsContract.Profile;
 import android.provider.ContactsContract.RawContacts;
 import android.provider.ContactsContract.RawContactsEntity;
 import android.util.Log;
 import android.widget.Toast;
 
-import com.android.contacts.common.database.ContactUpdateUtils;
-import com.android.contacts.common.model.AccountTypeManager;
-import com.android.contacts.common.model.RawContactDelta;
-import com.android.contacts.common.model.RawContactDeltaList;
-import com.android.contacts.common.model.RawContactModifier;
-import com.android.contacts.common.model.account.AccountWithDataSet;
+import com.android.contacts.model.AccountTypeManager;
+import com.android.contacts.model.RawContactModifier;
+import com.android.contacts.model.RawContactDelta;
+import com.android.contacts.model.RawContactDeltaList;
+import com.android.contacts.model.account.AccountWithDataSet;
 import com.android.contacts.util.CallerInfoCacheUtils;
-import com.android.contacts.util.ContactPhotoUtils;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
@@ -63,7 +59,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -297,9 +292,9 @@ public class ContactSaveService extends IntentService {
     public static Intent createSaveContactIntent(Context context, RawContactDeltaList state,
             String saveModeExtraKey, int saveMode, boolean isProfile,
             Class<? extends Activity> callbackActivity, String callbackAction, long rawContactId,
-            Uri updatedPhotoPath) {
+            String updatedPhotoPath) {
         Bundle bundle = new Bundle();
-        bundle.putParcelable(String.valueOf(rawContactId), updatedPhotoPath);
+        bundle.putString(String.valueOf(rawContactId), updatedPhotoPath);
         return createSaveContactIntent(context, state, saveModeExtraKey, saveMode, isProfile,
                 callbackActivity, callbackAction, bundle);
     }
@@ -410,12 +405,6 @@ public class ContactSaveService extends IntentService {
                 Log.e(TAG, "Problem persisting user edits", e);
                 break;
 
-            } catch (IllegalArgumentException e) {
-                // This is thrown by applyBatch on malformed requests
-                Log.e(TAG, "Problem persisting user edits", e);
-                showToast(R.string.contactSavedErrorToast);
-                break;
-
             } catch (OperationApplicationException e) {
                 // Version consistency failed, re-parent change and try again
                 Log.w(TAG, "Version consistency failed, re-parenting: " + e.toString());
@@ -435,8 +424,7 @@ public class ContactSaveService extends IntentService {
                 sb.append(")");
 
                 if (first) {
-                    throw new IllegalStateException(
-                            "Version consistency failed for a new contact", e);
+                    throw new IllegalStateException("Version consistency failed for a new contact");
                 }
 
                 final RawContactDeltaList newState = RawContactDeltaList.fromQuery(
@@ -459,7 +447,7 @@ public class ContactSaveService extends IntentService {
         // the ContactProvider already knows about newly-created contacts.
         if (updatedPhotos != null) {
             for (String key : updatedPhotos.keySet()) {
-                Uri photoUri = updatedPhotos.getParcelable(key);
+                String photoFilePath = updatedPhotos.getString(key);
                 long rawContactId = Long.parseLong(key);
 
                 // If the raw-contact ID is negative, we are saving a new raw-contact;
@@ -472,7 +460,8 @@ public class ContactSaveService extends IntentService {
                     }
                 }
 
-                if (!saveUpdatedPhoto(rawContactId, photoUri)) succeeded = false;
+                File photoFile = new File(photoFilePath);
+                if (!saveUpdatedPhoto(rawContactId, photoFile)) succeeded = false;
             }
         }
 
@@ -493,12 +482,37 @@ public class ContactSaveService extends IntentService {
      * Save updated photo for the specified raw-contact.
      * @return true for success, false for failure
      */
-    private boolean saveUpdatedPhoto(long rawContactId, Uri photoUri) {
+    private boolean saveUpdatedPhoto(long rawContactId, File photoFile) {
         final Uri outputUri = Uri.withAppendedPath(
                 ContentUris.withAppendedId(RawContacts.CONTENT_URI, rawContactId),
                 RawContacts.DisplayPhoto.CONTENT_DIRECTORY);
 
-        return ContactPhotoUtils.savePhotoFromUriToUri(this, photoUri, outputUri, true);
+        try {
+            final FileOutputStream outputStream = getContentResolver()
+                    .openAssetFileDescriptor(outputUri, "rw").createOutputStream();
+            try {
+                final FileInputStream inputStream = new FileInputStream(photoFile);
+                try {
+                    final byte[] buffer = new byte[16 * 1024];
+                    int length;
+                    int totalLength = 0;
+                    while ((length = inputStream.read(buffer)) > 0) {
+                        outputStream.write(buffer, 0, length);
+                        totalLength += length;
+                    }
+                    Log.v(TAG, "Wrote " + totalLength + " bytes for photo " + photoFile.toString());
+                } finally {
+                    inputStream.close();
+                }
+            } finally {
+                outputStream.close();
+                photoFile.delete();
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to write photo: " + photoFile.toString() + " because: " + e);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -819,24 +833,6 @@ public class ContactSaveService extends IntentService {
         final ContentValues values = new ContentValues(1);
         values.put(Contacts.STARRED, value);
         getContentResolver().update(contactUri, values, null, null);
-
-        // Undemote the contact if necessary
-        final Cursor c = getContentResolver().query(contactUri, new String[] {Contacts._ID},
-                null, null, null);
-        try {
-            if (c.moveToFirst()) {
-                final long id = c.getLong(0);
-
-                // Don't bother undemoting if this contact is the user's profile.
-                if (id < Profile.MIN_ID) {
-                    values.clear();
-                    values.put(String.valueOf(id), PinnedPositions.UNDEMOTE);
-                    getContentResolver().update(PinnedPositions.UPDATE_URI, values, null, null);
-                }
-            }
-        } finally {
-            c.close();
-        }
     }
 
     /**
@@ -907,7 +903,13 @@ public class ContactSaveService extends IntentService {
             return;
         }
 
-        ContactUpdateUtils.setSuperPrimary(this, dataId);
+        // Update the primary values in the data record.
+        ContentValues values = new ContentValues(1);
+        values.put(Data.IS_SUPER_PRIMARY, 1);
+        values.put(Data.IS_PRIMARY, 1);
+
+        getContentResolver().update(ContentUris.withAppendedId(Data.CONTENT_URI, dataId),
+                values, null, null);
     }
 
     /**
@@ -1016,9 +1018,6 @@ public class ContactSaveService extends IntentService {
         long rawContactIds[];
         long verifiedNameRawContactId = -1;
         try {
-            if (c.getCount() == 0) {
-                return;
-            }
             int maxDisplayNameSource = -1;
             rawContactIds = new long[c.getCount()];
             for (int i = 0; i < rawContactIds.length; i++) {

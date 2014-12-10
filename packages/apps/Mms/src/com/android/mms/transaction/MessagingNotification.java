@@ -165,7 +165,7 @@ public class MessagingNotification {
 
     private static OnDeletedReceiver sNotificationDeletedReceiver = new OnDeletedReceiver();
     private static Intent sNotificationOnDeleteIntent;
-    private static Handler sHandler = new Handler();
+    private static Handler sToastHandler = new Handler();
     private static PduPersister sPduPersister;
     private static final int MAX_BITMAP_DIMEN_DP = 360;
     private static float sScreenDensity;
@@ -292,9 +292,6 @@ public class MessagingNotification {
         if (delivery != null) {
             delivery.deliver(context, isStatusMessage);
         }
-
-        notificationSet.clear();
-        threads.clear();
     }
 
     /**
@@ -310,17 +307,9 @@ public class MessagingNotification {
             return;
         }
         Uri ringtoneUri = Uri.parse(ringtoneStr);
-        final NotificationPlayer player = new NotificationPlayer(LogTag.APP);
+        NotificationPlayer player = new NotificationPlayer(LogTag.APP);
         player.play(context, ringtoneUri, false, AudioManager.STREAM_NOTIFICATION,
                 IN_CONVERSATION_NOTIFICATION_VOLUME);
-
-        // Stop the sound after five seconds to handle continuous ringtones
-        sHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                player.stop();
-            }
-        }, 5000);
     }
 
     /**
@@ -795,7 +784,7 @@ public class MessagingNotification {
             return;
         }
 
-        sHandler.post(new Runnable() {
+        sToastHandler.post(new Runnable() {
             @Override
             public void run() {
                 Toast.makeText(context, message, (int)timeMillis).show();
@@ -904,24 +893,27 @@ public class MessagingNotification {
 
         if (isNew) {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-
-            boolean vibrate = false;
-            if (sp.contains(MessagingPreferenceActivity.NOTIFICATION_VIBRATE)) {
-                // The most recent change to the vibrate preference is to store a boolean
-                // value in NOTIFICATION_VIBRATE. If prefs contain that preference, use that
-                // first.
-                vibrate = sp.getBoolean(MessagingPreferenceActivity.NOTIFICATION_VIBRATE,
-                        false);
-            } else if (sp.contains(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_WHEN)) {
-                // This is to support the pre-JellyBean MR1.1 version of vibrate preferences
-                // when vibrate was a tri-state setting. As soon as the user opens the Messaging
-                // app's settings, it will migrate this setting from NOTIFICATION_VIBRATE_WHEN
-                // to the boolean value stored in NOTIFICATION_VIBRATE.
-                String vibrateWhen =
-                        sp.getString(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_WHEN, null);
-                vibrate = "always".equals(vibrateWhen);
+            String vibrateWhen;
+            if (sp.contains(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_WHEN)) {
+                vibrateWhen =
+                    sp.getString(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_WHEN, null);
+            } else if (sp.contains(MessagingPreferenceActivity.NOTIFICATION_VIBRATE)) {
+                vibrateWhen =
+                        sp.getBoolean(MessagingPreferenceActivity.NOTIFICATION_VIBRATE, false) ?
+                    context.getString(R.string.prefDefault_vibrate_true) :
+                    context.getString(R.string.prefDefault_vibrate_false);
+            } else {
+                vibrateWhen = context.getString(R.string.prefDefault_vibrateWhen);
             }
-            if (vibrate) {
+
+            boolean vibrateAlways = vibrateWhen.equals("always");
+            boolean vibrateSilent = vibrateWhen.equals("silent");
+            AudioManager audioManager =
+                (AudioManager)context.getSystemService(Context.AUDIO_SERVICE);
+            boolean nowSilent =
+                audioManager.getRingerMode() == AudioManager.RINGER_MODE_VIBRATE;
+
+            if (vibrateAlways || vibrateSilent && nowSilent) {
                 defaults |= Notification.DEFAULT_VIBRATE;
             }
 
@@ -1030,10 +1022,6 @@ public class MessagingNotification {
                     inboxStyle.addLine(info.formatInboxMessage(context));
                 }
                 notification = inboxStyle.build();
-
-                uniqueThreads.clear();
-                mostRecentNotifPerThread.clear();
-
                 if (DEBUG) {
                     Log.d(TAG, "updateNotification: multi messages," +
                             " showing inboxStyle notification");
@@ -1305,15 +1293,7 @@ public class MessagingNotification {
 
         try {
             if (cursor.moveToFirst()) {
-                int columnIndex = cursor.getColumnIndex(Sms.THREAD_ID);
-                if (columnIndex < 0) {
-                    if (DEBUG) {
-                        Log.d(TAG, "getSmsThreadId uri: " + uri +
-                                " Couldn't read row 0, col -1! returning THREAD_NONE");
-                    }
-                    return THREAD_NONE;
-                }
-                long threadId = cursor.getLong(columnIndex);
+                long threadId = cursor.getLong(cursor.getColumnIndex(Sms.THREAD_ID));
                 if (DEBUG) {
                     Log.d(TAG, "getSmsThreadId uri: " + uri +
                             " returning threadId: " + threadId);
@@ -1356,15 +1336,7 @@ public class MessagingNotification {
 
         try {
             if (cursor.moveToFirst()) {
-                int columnIndex = cursor.getColumnIndex(Mms.THREAD_ID);
-                if (columnIndex < 0) {
-                    if (DEBUG) {
-                        Log.d(TAG, "getThreadId uri: " + uri +
-                                " Couldn't read row 0, col -1! returning THREAD_NONE");
-                    }
-                    return THREAD_NONE;
-                }
-                long threadId = cursor.getLong(columnIndex);
+                long threadId = cursor.getLong(cursor.getColumnIndex(Mms.THREAD_ID));
                 if (DEBUG) {
                     Log.d(TAG, "getThreadId uri: " + uri +
                             " returning threadId: " + threadId);

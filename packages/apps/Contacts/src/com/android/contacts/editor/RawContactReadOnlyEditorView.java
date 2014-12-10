@@ -37,14 +37,14 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.android.contacts.ContactsUtils;
 import com.android.contacts.R;
-import com.android.contacts.common.GeoUtil;
-import com.android.contacts.common.model.RawContactModifier;
-import com.android.contacts.common.model.RawContactDelta;
-import com.android.contacts.common.model.ValuesDelta;
-import com.android.contacts.common.model.account.AccountType;
-import com.android.contacts.common.model.account.AccountWithDataSet;
-import com.android.contacts.common.model.dataitem.DataKind;
+import com.android.contacts.model.RawContactModifier;
+import com.android.contacts.model.RawContactDelta;
+import com.android.contacts.model.RawContactDelta.ValuesDelta;
+import com.android.contacts.model.account.AccountType;
+import com.android.contacts.model.account.AccountWithDataSet;
+import com.android.contacts.model.dataitem.DataKind;
 
 import java.util.ArrayList;
 
@@ -199,43 +199,39 @@ public class RawContactReadOnlyEditorView extends BaseRawContactEditorView
         // Phones
         ArrayList<ValuesDelta> phones = state.getMimeEntries(Phone.CONTENT_ITEM_TYPE);
         if (phones != null) {
-            boolean isFirstPhoneBound = true;
-            for (ValuesDelta phone : phones) {
-                final String phoneNumber = phone.getPhoneNumber();
-                if (TextUtils.isEmpty(phoneNumber)) {
-                    continue;
-                }
-                final String formattedNumber = PhoneNumberUtils.formatNumber(
-                        phoneNumber, phone.getPhoneNormalizedNumber(),
-                        GeoUtil.getCurrentCountryIso(getContext()));
-                CharSequence phoneType = null;
+            for (int i = 0; i < phones.size(); i++) {
+                ValuesDelta phone = phones.get(i);
+                final String phoneNumber = PhoneNumberUtils.formatNumber(
+                        phone.getPhoneNumber(),
+                        phone.getPhoneNormalizedNumber(),
+                        ContactsUtils.getCurrentCountryIso(getContext()));
+                final CharSequence phoneType;
                 if (phone.phoneHasType()) {
                     phoneType = Phone.getTypeLabel(
                             res, phone.getPhoneType(), phone.getPhoneLabel());
+                } else {
+                    phoneType = null;
                 }
-                bindData(mContext.getText(R.string.phoneLabelsGroup), formattedNumber,
-                        phoneType, isFirstPhoneBound, true);
-                isFirstPhoneBound = false;
+                bindData(mContext.getText(R.string.phoneLabelsGroup),
+                        phoneNumber, phoneType, i == 0);
             }
         }
 
         // Emails
         ArrayList<ValuesDelta> emails = state.getMimeEntries(Email.CONTENT_ITEM_TYPE);
         if (emails != null) {
-            boolean isFirstEmailBound = true;
-            for (ValuesDelta email : emails) {
+            for (int i = 0; i < emails.size(); i++) {
+                ValuesDelta email = emails.get(i);
                 final String emailAddress = email.getEmailData();
-                if (TextUtils.isEmpty(emailAddress)) {
-                    continue;
-                }
-                CharSequence emailType = null;
+                final CharSequence emailType;
                 if (email.emailHasType()) {
                     emailType = Email.getTypeLabel(
                             res, email.getEmailType(), email.getEmailLabel());
+                } else {
+                    emailType = null;
                 }
                 bindData(mContext.getText(R.string.emailLabelsGroup), emailAddress, emailType,
-                        isFirstEmailBound);
-                isFirstEmailBound = false;
+                        i == 0);
             }
         }
 
@@ -247,13 +243,8 @@ public class RawContactReadOnlyEditorView extends BaseRawContactEditorView
         }
     }
 
-    private void bindData(CharSequence titleText, CharSequence data, CharSequence type,
-            boolean isFirstEntry) {
-        bindData(titleText, data, type, isFirstEntry, false);
-    }
-
-    private void bindData(CharSequence titleText, CharSequence data, CharSequence type,
-            boolean isFirstEntry, boolean forceLTR) {
+    private void bindData(
+            CharSequence titleText, CharSequence data, CharSequence type, boolean isFirstEntry) {
         final View field = mInflater.inflate(R.layout.item_read_only_field, mGeneral, false);
         final View divider = field.findViewById(R.id.divider);
         if (isFirstEntry) {
@@ -267,9 +258,6 @@ public class RawContactReadOnlyEditorView extends BaseRawContactEditorView
         }
         final TextView dataView = (TextView) field.findViewById(R.id.data);
         dataView.setText(data);
-        if (forceLTR) {
-            dataView.setTextDirection(View.TEXT_DIRECTION_LTR);
-        }
         final TextView typeView = (TextView) field.findViewById(R.id.type);
         if (!TextUtils.isEmpty(type)) {
             typeView.setText(type);

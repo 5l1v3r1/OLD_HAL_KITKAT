@@ -35,8 +35,8 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import com.android.contacts.common.model.AccountTypeManager;
-import com.android.contacts.common.model.account.AccountType;
+import com.android.contacts.model.AccountTypeManager;
+import com.android.contacts.model.account.AccountType;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -157,9 +157,6 @@ public class SplitAggregateView extends ListView {
         Uri dataUri = Uri.withAppendedPath(mAggregateUri, Data.CONTENT_DIRECTORY);
         Cursor cursor = getContext().getContentResolver().query(dataUri,
                 SplitQuery.COLUMNS, null, null, null);
-        if (cursor == null) {
-            return Collections.emptyList();
-        }
         try {
             while (cursor.moveToNext()) {
                 long rawContactId = cursor.getLong(SplitQuery.RAW_CONTACT_ID);

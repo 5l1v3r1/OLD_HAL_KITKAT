@@ -26,9 +26,6 @@ import android.provider.ContactsContract.CommonDataKinds.Phone;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.android.contacts.common.list.ContactEntryListAdapter;
-import com.android.contacts.common.list.ContactListItemView;
-
 /**
  * A cursor adapter for the Phones.CONTENT_TYPE content type.
  */
@@ -106,6 +103,6 @@ public class LegacyPhoneNumberListAdapter extends ContactEntryListAdapter {
             label = Phone.getTypeLabel(getContext().getResources(), type, customLabel);
         }
         view.setLabel(label);
-        view.showPhoneNumber(cursor, PHONE_NUMBER_COLUMN_INDEX);
+        view.showData(cursor, PHONE_NUMBER_COLUMN_INDEX);
     }
 }

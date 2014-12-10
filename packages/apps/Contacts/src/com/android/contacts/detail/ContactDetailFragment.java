@@ -19,7 +19,6 @@ package com.android.contacts.detail;
 import android.app.Activity;
 import android.app.Fragment;
 import android.app.SearchManager;
-import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
@@ -31,7 +30,8 @@ import android.net.Uri;
 import android.net.WebAddress;
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.provider.CalendarContract;
+import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.CommonDataKinds.Email;
 import android.provider.ContactsContract.CommonDataKinds.GroupMembership;
@@ -42,7 +42,6 @@ import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.Directory;
 import android.provider.ContactsContract.DisplayNameSources;
 import android.provider.ContactsContract.StatusUpdates;
-import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.ContextMenu;
@@ -69,60 +68,54 @@ import android.widget.ListPopupWindow;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import com.android.contacts.Collapser;
+import com.android.contacts.Collapser.Collapsible;
+import com.android.contacts.ContactPresenceIconUtil;
 import com.android.contacts.ContactSaveService;
+import com.android.contacts.ContactsUtils;
+import com.android.contacts.GroupMetaData;
 import com.android.contacts.R;
 import com.android.contacts.TypePrecedence;
 import com.android.contacts.activities.ContactDetailActivity.FragmentKeyListener;
-import com.android.contacts.common.CallUtil;
-import com.android.contacts.common.ClipboardUtils;
-import com.android.contacts.common.Collapser;
-import com.android.contacts.common.ContactsUtils;
-import com.android.contacts.common.GroupMetaData;
-import com.android.contacts.common.Collapser.Collapsible;
-import com.android.contacts.common.ContactPresenceIconUtil;
-import com.android.contacts.common.GeoUtil;
-import com.android.contacts.common.MoreContactUtils;
-import com.android.contacts.common.editor.SelectAccountDialogFragment;
-import com.android.contacts.common.model.AccountTypeManager;
-import com.android.contacts.common.model.ValuesDelta;
-import com.android.contacts.common.model.account.AccountType;
-import com.android.contacts.common.model.account.AccountType.EditType;
-import com.android.contacts.common.model.account.AccountWithDataSet;
-import com.android.contacts.common.model.dataitem.DataKind;
-import com.android.contacts.common.util.AccountsListAdapter.AccountListFilter;
-import com.android.contacts.common.util.ContactDisplayUtils;
-import com.android.contacts.common.util.DataStatus;
-import com.android.contacts.common.util.DateUtils;
-import com.android.contacts.common.model.Contact;
-import com.android.contacts.common.model.RawContact;
-import com.android.contacts.common.model.RawContactDelta;
-import com.android.contacts.common.model.RawContactDeltaList;
-import com.android.contacts.common.model.RawContactModifier;
-import com.android.contacts.common.model.dataitem.DataItem;
-import com.android.contacts.common.model.dataitem.EmailDataItem;
-import com.android.contacts.common.model.dataitem.EventDataItem;
-import com.android.contacts.common.model.dataitem.GroupMembershipDataItem;
-import com.android.contacts.common.model.dataitem.ImDataItem;
-import com.android.contacts.common.model.dataitem.NicknameDataItem;
-import com.android.contacts.common.model.dataitem.NoteDataItem;
-import com.android.contacts.common.model.dataitem.OrganizationDataItem;
-import com.android.contacts.common.model.dataitem.PhoneDataItem;
-import com.android.contacts.common.model.dataitem.RelationDataItem;
-import com.android.contacts.common.model.dataitem.SipAddressDataItem;
-import com.android.contacts.common.model.dataitem.StructuredNameDataItem;
-import com.android.contacts.common.model.dataitem.StructuredPostalDataItem;
-import com.android.contacts.common.model.dataitem.WebsiteDataItem;
+import com.android.contacts.editor.SelectAccountDialogFragment;
+import com.android.contacts.model.AccountTypeManager;
+import com.android.contacts.model.Contact;
+import com.android.contacts.model.RawContact;
+import com.android.contacts.model.RawContactDelta;
+import com.android.contacts.model.RawContactDelta.ValuesDelta;
+import com.android.contacts.model.RawContactDeltaList;
+import com.android.contacts.model.RawContactModifier;
+import com.android.contacts.model.account.AccountType;
+import com.android.contacts.model.account.AccountType.EditType;
+import com.android.contacts.model.account.AccountWithDataSet;
+import com.android.contacts.model.dataitem.DataItem;
+import com.android.contacts.model.dataitem.DataKind;
+import com.android.contacts.model.dataitem.EmailDataItem;
+import com.android.contacts.model.dataitem.EventDataItem;
+import com.android.contacts.model.dataitem.GroupMembershipDataItem;
+import com.android.contacts.model.dataitem.ImDataItem;
+import com.android.contacts.model.dataitem.NicknameDataItem;
+import com.android.contacts.model.dataitem.NoteDataItem;
+import com.android.contacts.model.dataitem.OrganizationDataItem;
+import com.android.contacts.model.dataitem.PhoneDataItem;
+import com.android.contacts.model.dataitem.RelationDataItem;
+import com.android.contacts.model.dataitem.SipAddressDataItem;
+import com.android.contacts.model.dataitem.StructuredNameDataItem;
+import com.android.contacts.model.dataitem.StructuredPostalDataItem;
+import com.android.contacts.model.dataitem.WebsiteDataItem;
+import com.android.contacts.util.AccountsListAdapter.AccountListFilter;
+import com.android.contacts.util.ClipboardUtils;
+import com.android.contacts.util.Constants;
+import com.android.contacts.util.DataStatus;
+import com.android.contacts.util.DateUtils;
 import com.android.contacts.util.PhoneCapabilityTester;
 import com.android.contacts.util.StructuredPostalUtils;
-import com.android.contacts.util.UiClosables;
+import com.android.internal.telephony.ITelephony;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
 import com.google.common.collect.Iterables;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,8 +124,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
         SelectAccountDialogFragment.Listener, OnItemClickListener {
 
     private static final String TAG = "ContactDetailFragment";
-
-    private static final int TEXT_DIRECTION_UNDEFINED = -1;
 
     private interface ContextMenuIds {
         static final int COPY_TEXT = 0;
@@ -161,6 +152,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
 
     private Button mQuickFixButton;
     private QuickFix mQuickFix;
+    private String mDefaultCountryIso;
     private boolean mContactHasSocialUpdates;
     private boolean mShowStaticPhoto = true;
 
@@ -168,6 +160,21 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
             new MakeLocalCopyQuickFix(),
             new AddToMyContactsQuickFix()
     };
+
+    /**
+     * Device capability: Set during buildEntries and used in the long-press context menu
+     */
+    private boolean mHasPhone;
+
+    /**
+     * Device capability: Set during buildEntries and used in the long-press context menu
+     */
+    private boolean mHasSms;
+
+    /**
+     * Device capability: Set during buildEntries and used in the long-press context menu
+     */
+    private boolean mHasSip;
 
     /**
      * The view shown if the detail list is empty.
@@ -274,6 +281,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
     public void onAttach(Activity activity) {
         super.onAttach(activity);
         mContext = activity;
+        mDefaultCountryIso = ContactsUtils.getCurrentCountryIso(mContext);
         mViewEntryDimensions = new ViewEntryDimensions(mContext.getResources());
     }
 
@@ -412,6 +420,9 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
             return;
         }
 
+        // Figure out if the contact has social updates or not
+        mContactHasSocialUpdates = !mContactData.getStreamItems().isEmpty();
+
         // Setup the photo if applicable
         if (mStaticPhotoContainer != null) {
             // The presence of a static photo container is not sufficient to determine whether or
@@ -448,7 +459,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
         Collapser.collapseList(mPostalEntries);
         Collapser.collapseList(mImEntries);
         Collapser.collapseList(mEventEntries);
-        Collapser.collapseList(mWebsiteEntries);
 
         mIsUniqueNumber = mPhoneEntries.size() == 1;
         mIsUniqueEmail = mEmailEntries.size() == 1;
@@ -516,10 +526,9 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
      * Build up the entries to display on the screen.
      */
     private final void buildEntries() {
-        final boolean hasPhone = PhoneCapabilityTester.isPhone(mContext);
-        final ComponentName smsComponent = PhoneCapabilityTester.getSmsComponent(getContext());
-        final boolean hasSms = (smsComponent != null);
-        final boolean hasSip = PhoneCapabilityTester.isSipPhone(mContext);
+        mHasPhone = PhoneCapabilityTester.isPhone(mContext);
+        mHasSms = PhoneCapabilityTester.isSmsIntentRegistered(mContext);
+        mHasSip = PhoneCapabilityTester.isSipPhone(mContext);
 
         // Clear out the old entries
         mAllEntries.clear();
@@ -534,7 +543,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
         ArrayList<String> groups = new ArrayList<String>();
         for (RawContact rawContact: mContactData.getRawContacts()) {
             final long rawContactId = rawContact.getId();
-            final AccountType accountType = rawContact.getAccountType(mContext);
             for (DataItem dataItem : rawContact.getDataItems()) {
                 dataItem.setRawContactId(rawContactId);
 
@@ -550,12 +558,11 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                     continue;
                 }
 
-                final DataKind kind = AccountTypeManager.getInstance(mContext)
-                        .getKindOrFallback(accountType, dataItem.getMimeType());
+                final DataKind kind = dataItem.getDataKind();
                 if (kind == null) continue;
 
                 final DetailViewEntry entry = DetailViewEntry.fromValues(mContext, dataItem,
-                        mContactData.isDirectoryEntry(), mContactData.getDirectoryId(), kind);
+                        mContactData.isDirectoryEntry(), mContactData.getDirectoryId());
                 entry.maxLines = kind.maxLinesForDisplay;
 
                 final boolean hasData = !TextUtils.isEmpty(entry.data);
@@ -567,25 +574,20 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                     PhoneDataItem phone = (PhoneDataItem) dataItem;
                     // Build phone entries
                     entry.data = phone.getFormattedPhoneNumber();
-                    final Intent phoneIntent = hasPhone ?
-                            CallUtil.getCallIntent(entry.data) : null;
-                    Intent smsIntent = null;
-                    if (hasSms) {
-                        smsIntent = new Intent(Intent.ACTION_SENDTO,
-                                Uri.fromParts(CallUtil.SCHEME_SMSTO, entry.data, null));
-                        smsIntent.setComponent(smsComponent);
-                    }
+                    final Intent phoneIntent = mHasPhone ?
+                            ContactsUtils.getCallIntent(entry.data) : null;
+                    final Intent smsIntent = mHasSms ? new Intent(Intent.ACTION_SENDTO,
+                            Uri.fromParts(Constants.SCHEME_SMSTO, entry.data, null)) : null;
 
                     // Configure Icons and Intents.
-                    if (hasPhone && hasSms) {
+                    if (mHasPhone && mHasSms) {
                         entry.intent = phoneIntent;
                         entry.secondaryIntent = smsIntent;
                         entry.secondaryActionIcon = kind.iconAltRes;
-                        entry.secondaryActionDescription =
-                            ContactDisplayUtils.getSmsLabelResourceId(entry.type);
-                    } else if (hasPhone) {
+                        entry.secondaryActionDescription = kind.iconAltDescriptionRes;
+                    } else if (mHasPhone) {
                         entry.intent = phoneIntent;
-                    } else if (hasSms) {
+                    } else if (mHasSms) {
                         entry.intent = smsIntent;
                     } else {
                         entry.intent = null;
@@ -604,14 +606,10 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                         // add to end of list
                         mPhoneEntries.add(entry);
                     }
-
-                    // Configure the text direction. Phone numbers should be displayed LTR
-                    // regardless of what locale the device is in.
-                    entry.textDirection = View.TEXT_DIRECTION_LTR;
                 } else if (dataItem instanceof EmailDataItem && hasData) {
                     // Build email entries
                     entry.intent = new Intent(Intent.ACTION_SENDTO,
-                            Uri.fromParts(CallUtil.SCHEME_MAILTO, entry.data, null));
+                            Uri.fromParts(Constants.SCHEME_MAILTO, entry.data, null));
                     entry.isPrimary = isSuperPrimary;
                     // If entry is a primary entry, then render it first in the view.
                     if (entry.isPrimary) {
@@ -627,8 +625,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                         ImDataItem im = ImDataItem.createFromEmail(email);
 
                         final DetailViewEntry imEntry = DetailViewEntry.fromValues(mContext, im,
-                                mContactData.isDirectoryEntry(), mContactData.getDirectoryId(),
-                                kind);
+                                mContactData.isDirectoryEntry(), mContactData.getDirectoryId());
                         buildImActions(mContext, imEntry, im);
                         imEntry.setPresence(status.getPresence());
                         imEntry.maxLines = kind.maxLinesForDisplay;
@@ -682,9 +679,9 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                 } else if (dataItem instanceof SipAddressDataItem && hasData) {
                     // Build SipAddress entries
                     entry.uri = null;
-                    if (hasSip) {
-                        entry.intent = CallUtil.getCallIntent(
-                                Uri.fromParts(CallUtil.SCHEME_SIP, entry.data, null));
+                    if (mHasSip) {
+                        entry.intent = ContactsUtils.getCallIntent(
+                                Uri.fromParts(Constants.SCHEME_SIP, entry.data, null));
                     } else {
                         entry.intent = null;
                     }
@@ -696,15 +693,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                     // secondary=false for this field, and tweak the weight
                     // of its DataKind.)
                 } else if (dataItem instanceof EventDataItem && hasData) {
-                    final Calendar cal = DateUtils.parseDate(entry.data, false);
-                    if (cal != null) {
-                        final Date nextAnniversary =
-                                DateUtils.getNextAnnualDate(cal);
-                        final Uri.Builder builder = CalendarContract.CONTENT_URI.buildUpon();
-                        builder.appendPath("time");
-                        ContentUris.appendId(builder, nextAnniversary.getTime());
-                        entry.intent = new Intent(Intent.ACTION_VIEW).setData(builder.build());
-                    }
                     entry.data = DateUtils.formatDate(mContext, entry.data);
                     entry.uri = null;
                     mEventEntries.add(entry);
@@ -718,19 +706,20 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                     entry.intent = new Intent(Intent.ACTION_VIEW);
                     entry.intent.setDataAndType(entry.uri, entry.mimetype);
 
-                    entry.data = dataItem.buildDataString(getContext(), kind);
+                    entry.data = dataItem.buildDataString();
 
                     if (!TextUtils.isEmpty(entry.data)) {
                         // If the account type exists in the hash map, add it as another entry for
                         // that account type
-                        if (mOtherEntriesMap.containsKey(accountType)) {
-                            List<DetailViewEntry> listEntries = mOtherEntriesMap.get(accountType);
+                        AccountType type = dataItem.getAccountType();
+                        if (mOtherEntriesMap.containsKey(type)) {
+                            List<DetailViewEntry> listEntries = mOtherEntriesMap.get(type);
                             listEntries.add(entry);
                         } else {
                             // Otherwise create a new list with the entry and add it to the hash map
                             List<DetailViewEntry> listEntries = new ArrayList<DetailViewEntry>();
                             listEntries.add(entry);
-                            mOtherEntriesMap.put(accountType, listEntries);
+                            mOtherEntriesMap.put(type, listEntries);
                         }
                     }
                 }
@@ -882,7 +871,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
             public void onItemClick(AdapterView<?> parent, View view, int position,
                     long id) {
                 if (mListener != null && mContactData != null) {
-                    mListener.onItemClicked(MoreContactUtils.getInvitableIntent(
+                    mListener.onItemClicked(ContactsUtils.getInvitableIntent(
                             popupAdapter.getItem(position) /* account type */,
                             mContactData.getLookupUri()));
                 }
@@ -992,33 +981,20 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
             }
         } else {
             // Build an IM Intent
-            final Intent imIntent = getCustomIMIntent(im, protocol);
-            if (imIntent != null &&
-                    PhoneCapabilityTester.isIntentRegistered(context, imIntent)) {
-                entry.intent = imIntent;
+            String host = im.getCustomProtocol();
+
+            if (protocol != Im.PROTOCOL_CUSTOM) {
+                // Try bringing in a well-known host for specific protocols
+                host = ContactsUtils.lookupProviderNameFromId(protocol);
+            }
+
+            if (!TextUtils.isEmpty(host)) {
+                final String authority = host.toLowerCase();
+                final Uri imUri = new Uri.Builder().scheme(Constants.SCHEME_IMTO).authority(
+                        authority).appendPath(data).build();
+                entry.intent = new Intent(Intent.ACTION_SENDTO, imUri);
             }
         }
-    }
-
-    @VisibleForTesting
-    public static Intent getCustomIMIntent(ImDataItem im, int protocol) {
-        String host = im.getCustomProtocol();
-        final String data = im.getData();
-        if (TextUtils.isEmpty(data)) {
-            return null;
-        }
-        if (protocol != Im.PROTOCOL_CUSTOM) {
-            // Try bringing in a well-known host for specific protocols
-            host = ContactsUtils.lookupProviderNameFromId(protocol);
-        }
-        if (TextUtils.isEmpty(host)) {
-            return null;
-        }
-        final String authority = host.toLowerCase();
-        final Uri imUri = new Uri.Builder().scheme(CallUtil.SCHEME_IMTO).authority(
-                authority).appendPath(data).build();
-        final Intent intent = new Intent(Intent.ACTION_SENDTO, imUri);
-        return intent;
     }
 
     /**
@@ -1047,7 +1023,9 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
     }
 
     private void dismissPopupIfShown() {
-        UiClosables.closeQuietly(mPopup);
+        if (mPopup != null && mPopup.isShowing()) {
+            mPopup.dismiss();
+        }
         mPopup = null;
     }
 
@@ -1209,7 +1187,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
         public String data;
         public Uri uri;
         public int maxLines = 1;
-        public int textDirection = TEXT_DIRECTION_UNDEFINED;
         public String mimetype;
 
         public Context context = null;
@@ -1228,26 +1205,34 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
 
         @Override
         public String toString() {
-            return Objects.toStringHelper(this)
-                    .add("type", type)
-                    .add("kind", kind)
-                    .add("typeString", typeString)
-                    .add("data", data)
-                    .add("uri", uri)
-                    .add("maxLines", maxLines)
-                    .add("mimetype", mimetype)
-                    .add("context", context)
-                    .add("isPrimary", isPrimary)
-                    .add("secondaryActionIcon", secondaryActionIcon)
-                    .add("secondaryActionDescription", secondaryActionDescription)
-                    .add("intent", intent)
-                    .add("secondaryIntent", secondaryIntent)
-                    .add("ids", ids)
-                    .add("collapseCount", collapseCount)
-                    .add("presence", presence)
-                    .add("chatCapability", chatCapability)
-                    .add("mIsInSubSection", mIsInSubSection)
-                    .toString();
+            StringBuilder sb = new StringBuilder();
+            sb.append("== DetailViewEntry ==\n");
+            sb.append("  type: " + type + "\n");
+            sb.append("  kind: " + kind + "\n");
+            sb.append("  typeString: " + typeString + "\n");
+            sb.append("  data: " + data + "\n");
+            sb.append("  uri: " + uri.toString() + "\n");
+            sb.append("  maxLines: " + maxLines + "\n");
+            sb.append("  mimetype: " + mimetype + "\n");
+            sb.append("  isPrimary: " + (isPrimary ? "true" : "false") + "\n");
+            sb.append("  secondaryActionIcon: " + secondaryActionIcon + "\n");
+            sb.append("  secondaryActionDescription: " + secondaryActionDescription + "\n");
+            if (intent == null) {
+                sb.append("  intent: " + intent.toString() + "\n");
+            } else {
+                sb.append("  intent: " + intent.toString() + "\n");
+            }
+            if (secondaryIntent == null) {
+                sb.append("  secondaryIntent: (null)\n");
+            } else {
+                sb.append("  secondaryIntent: " + secondaryIntent.toString() + "\n");
+            }
+            sb.append("  ids: " + Iterables.toString(ids) + "\n");
+            sb.append("  collapseCount: " + collapseCount + "\n");
+            sb.append("  presence: " + presence + "\n");
+            sb.append("  chatCapability: " + chatCapability + "\n");
+            sb.append("  mIsInSubsection: " + (mIsInSubSection ? "true" : "false") + "\n");
+            return sb.toString();
         }
 
         DetailViewEntry() {
@@ -1259,7 +1244,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
          * Build new {@link DetailViewEntry} and populate from the given values.
          */
         public static DetailViewEntry fromValues(Context context, DataItem item,
-                boolean isDirectoryEntry, long directoryId, DataKind dataKind) {
+                boolean isDirectoryEntry, long directoryId) {
             final DetailViewEntry entry = new DetailViewEntry();
             entry.id = item.getId();
             entry.context = context;
@@ -1269,15 +1254,15 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                         ContactsContract.DIRECTORY_PARAM_KEY, String.valueOf(directoryId)).build();
             }
             entry.mimetype = item.getMimeType();
-            entry.kind = dataKind.getKindString(context);
-            entry.data = item.buildDataString(context, dataKind);
+            entry.kind = item.getKindString();
+            entry.data = item.buildDataString();
 
-            if (item.hasKindTypeColumn(dataKind)) {
-                entry.type = item.getKindTypeColumn(dataKind);
+            if (item.hasKindTypeColumn()) {
+                entry.type = item.getKindTypeColumn();
 
                 // get type string
                 entry.typeString = "";
-                for (EditType type : dataKind.typeList) {
+                for (EditType type : item.getDataKind().typeList) {
                     if (type.rawValue == entry.type) {
                         if (type.customColumn == null) {
                             // Non-custom type. Get its description from the resource
@@ -1310,7 +1295,12 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
         }
 
         @Override
-        public void collapseWith(DetailViewEntry entry) {
+        public boolean collapseWith(DetailViewEntry entry) {
+            // assert equal collapse keys
+            if (!shouldCollapseWith(entry)) {
+                return false;
+            }
+
             // Choose the label associated with the highest type precedence.
             if (TypePrecedence.getTypePrecedence(mimetype, type)
                     > TypePrecedence.getTypePrecedence(entry.mimetype, entry.type)) {
@@ -1336,6 +1326,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
             // Keep track of all the ids that have been collapsed with this one.
             ids.add(entry.getId());
             collapseCount++;
+            return true;
         }
 
         @Override
@@ -1344,7 +1335,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                 return false;
             }
 
-            if (!MoreContactUtils.shouldCollapse(mimetype, data, entry.mimetype, entry.data)) {
+            if (!ContactsUtils.shouldCollapse(mimetype, data, entry.mimetype, entry.data)) {
                 return false;
             }
 
@@ -1499,7 +1490,9 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
         }
 
         private View getHeaderEntryView(View convertView, ViewGroup parent) {
-            final int desiredLayoutResourceId = R.layout.detail_header_contact_without_updates;
+            final int desiredLayoutResourceId = mContactHasSocialUpdates ?
+                    R.layout.detail_header_contact_with_updates :
+                    R.layout.detail_header_contact_without_updates;
             View result = null;
             HeaderViewCache viewCache = null;
 
@@ -1683,13 +1676,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
             views.data.setText(entry.data);
             setMaxLines(views.data, entry.maxLines);
 
-            // Gray out the data item if it does not perform an action when clicked
-            // Set primary_text_color even if it might have been set by default to avoid
-            // views being gray sometimes when they are not supposed to, due to view reuse
-            ((TextView) view.findViewById(R.id.data)).setTextColor(
-                        getResources().getColor((entry.intent == null) ?
-                        R.color.secondary_text_color : R.color.primary_text_color));
-
             // Set the default contact method
             views.primaryIndicator.setVisibility(entry.isPrimary ? View.VISIBLE : View.GONE);
 
@@ -1716,13 +1702,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
             String secondaryActionDescription = null;
             if (entry.secondaryActionIcon != -1) {
                 secondaryActionIcon = resources.getDrawable(entry.secondaryActionIcon);
-                if (ContactDisplayUtils.isCustomPhoneType(entry.type)) {
-                    secondaryActionDescription = resources.getString(
-                            entry.secondaryActionDescription, entry.typeString);
-                } else {
-                    secondaryActionDescription = resources.getString(
-                            entry.secondaryActionDescription);
-                }
+                secondaryActionDescription = resources.getString(entry.secondaryActionDescription);
             } else if ((entry.chatCapability & Im.CAPABILITY_HAS_CAMERA) != 0) {
                 secondaryActionIcon =
                         resources.getDrawable(R.drawable.sym_action_videochat_holo_light);
@@ -1763,11 +1743,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                     mViewEntryDimensions.getPaddingTop(),
                     secondaryActionViewContainer.getPaddingRight(),
                     mViewEntryDimensions.getPaddingBottom());
-
-            // Set the text direction
-            if (entry.textDirection != TEXT_DIRECTION_UNDEFINED) {
-                views.data.setTextDirection(entry.textDirection);
-            }
         }
 
         private void setMaxLines(TextView textView, int maxLines) {
@@ -1887,11 +1862,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
         menu.add(ContextMenu.NONE, ContextMenuIds.COPY_TEXT,
                 ContextMenu.NONE, getString(R.string.copy_text));
 
-        // Don't allow setting or clearing of defaults for directory contacts
-        if (mContactData.isDirectoryEntry()) {
-            return;
-        }
-
         String selectedMimeType = selectedEntry.mimetype;
 
         // Defaults to true will only enable the detail to be copied to the clipboard.
@@ -1964,12 +1934,15 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
     public boolean handleKeyDown(int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_CALL: {
-                TelephonyManager telephonyManager =
-                    (TelephonyManager) getActivity().getSystemService(Context.TELEPHONY_SERVICE);
-                if (telephonyManager != null &&
-                        telephonyManager.getCallState() != TelephonyManager.CALL_STATE_IDLE) {
-                    // Skip out and let the key be handled at a higher level
-                    break;
+                try {
+                    ITelephony phone = ITelephony.Stub.asInterface(
+                            ServiceManager.checkService("phone"));
+                    if (phone != null && !phone.isIdle()) {
+                        // Skip out and let the key be handled at a higher level
+                        break;
+                    }
+                } catch (RemoteException re) {
+                    // Fall through and try to call the contact
                 }
 
                 int index = mListView.getSelectedItemPosition();
@@ -1982,7 +1955,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                     }
                 } else if (mPrimaryPhoneUri != null) {
                     // There isn't anything selected, call the default number
-                    mContext.startActivity(CallUtil.getCallIntent(mPrimaryPhoneUri));
+                    mContext.startActivity(ContactsUtils.getCallIntent(mPrimaryPhoneUri));
                     return true;
                 }
                 return false;
@@ -2025,7 +1998,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
             if (defaultGroupId == -1) return false;
 
             final RawContact rawContact = (RawContact) mContactData.getRawContacts().get(0);
-            final AccountType type = rawContact.getAccountType(getContext());
+            final AccountType type = rawContact.getAccountType();
             // Offline or non-writeable account? Nothing to fix
             if (type == null || !type.areContactsWritable()) return false;
 
@@ -2035,7 +2008,7 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                     rawContact.getDataItems(), GroupMembershipDataItem.class)) {
                 GroupMembershipDataItem groupMembership = (GroupMembershipDataItem) dataItem;
                 final Long groupId = groupMembership.getGroupRowId();
-                if (groupId != null && groupId == defaultGroupId) {
+                if (groupId == defaultGroupId) {
                     isInDefaultGroup = true;
                     break;
                 }
@@ -2066,7 +2039,6 @@ public class ContactDetailFragment extends Fragment implements FragmentKeyListen
                     GroupMembership.CONTENT_ITEM_TYPE);
             final ValuesDelta entry = RawContactModifier.insertChild(rawContactEntityDelta,
                     groupMembershipKind);
-            if (entry == null) return;
             entry.setGroupRowId(defaultGroupId);
 
             // and fire off the intent. we don't need a callback, as the database listener

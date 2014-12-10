@@ -16,7 +16,6 @@
 
 package com.android.mms.widget;
 
-import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.content.Context;
 import android.content.Intent;
@@ -39,6 +38,7 @@ import com.android.mms.data.Conversation;
 import com.android.mms.ui.ConversationList;
 import com.android.mms.ui.ConversationListItem;
 import com.android.mms.ui.MessageUtils;
+import com.android.mms.util.SmileyParser;
 
 public class MmsWidgetService extends RemoteViewsService {
     private static final String TAG = "MmsWidgetService";
@@ -183,8 +183,9 @@ public class MmsWidgetService extends RemoteViewsService {
             if (Log.isLoggable(LogTag.WIDGET, Log.VERBOSE)) {
                 Log.v(TAG, "getConversationCount");
             }
-
-            return Math.min(mConversationCursor.getCount(), MAX_CONVERSATIONS_COUNT);
+            synchronized (sWidgetLock) {
+                return Math.min(mConversationCursor.getCount(), MAX_CONVERSATIONS_COUNT);
+            }
         }
 
         /*
@@ -270,8 +271,11 @@ public class MmsWidgetService extends RemoteViewsService {
                 remoteViews.setTextViewText(R.id.from, from);
 
                 // Subject
+                // TODO: the SmileyParser inserts image spans but they don't seem to make it
+                // into the remote view.
+                SmileyParser parser = SmileyParser.getInstance();
                 remoteViews.setTextViewText(R.id.subject,
-                        addColor(conv.getSnippet(),
+                        addColor(parser.addSmileySpans(conv.getSnippet()),
                                 conv.hasUnreadMessages() ? SUBJECT_TEXT_COLOR_UNREAD :
                                     SUBJECT_TEXT_COLOR_READ));
 
@@ -297,11 +301,8 @@ public class MmsWidgetService extends RemoteViewsService {
             RemoteViews view = new RemoteViews(mContext.getPackageName(), R.layout.widget_loading);
             view.setTextViewText(
                     R.id.loading_text, mContext.getText(R.string.view_more_conversations));
-            PendingIntent pendingIntent =
-                    PendingIntent.getActivity(mContext, 0, new Intent(mContext,
-                            ConversationList.class),
-                            PendingIntent.FLAG_UPDATE_CURRENT);
-            view.setOnClickPendingIntent(R.id.widget_loading, pendingIntent);
+            view.setOnClickFillInIntent(R.id.widget_loading,
+                   new Intent(mContext, ConversationList.class));
             return view;
         }
 

@@ -37,9 +37,9 @@ import android.widget.AbsListView.OnScrollListener;
 import com.android.contacts.NfcHandler;
 import com.android.contacts.R;
 import com.android.contacts.activities.ContactDetailActivity.FragmentKeyListener;
-import com.android.contacts.common.model.Contact;
+import com.android.contacts.model.Contact;
 import com.android.contacts.util.PhoneCapabilityTester;
-import com.android.contacts.common.util.UriUtils;
+import com.android.contacts.util.UriUtils;
 import com.android.contacts.widget.FrameLayoutWithOverlay;
 import com.android.contacts.widget.TransitionAnimationView;
 
@@ -285,11 +285,12 @@ public class ContactDetailLayoutController {
                     !UriUtils.areEqual(mContactData.getLookupUri(), data.getLookupUri());
         }
         mContactData = data;
+        mContactHasUpdates = !data.getStreamItems().isEmpty();
 
         if (PhoneCapabilityTester.isUsingTwoPanes(mActivity)) {
             // Tablet: If we already showed data before, we want to cross-fade from screen to screen
             if (contactWasLoaded && mTransitionAnimationView != null && isDifferentContact) {
-                mTransitionAnimationView.startMaskTransition(mContactData == null, -1);
+                mTransitionAnimationView.startMaskTransition(mContactData == null);
             }
         } else {
             // Small screen: We are on our own screen. Fade the data in, but only the first time
@@ -301,7 +302,12 @@ public class ContactDetailLayoutController {
             }
         }
 
-        showContactWithoutUpdates();
+        if (mContactHasUpdates) {
+            showContactWithUpdates(
+                    contactWasLoaded && contactHadUpdates == false);
+        } else {
+            showContactWithoutUpdates();
+        }
     }
 
     public void showEmptyState() {
@@ -359,7 +365,7 @@ public class ContactDetailLayoutController {
                     // This is screen is very hard to animate properly, because there is such a hard
                     // cut from the regular version. A proper animation would have to reflow text
                     // and move things around. Doing a simple cross-fade instead.
-                    mTransitionAnimationView.startMaskTransition(false, -1);
+                    mTransitionAnimationView.startMaskTransition(false);
                 }
 
                 // Set the contact data (hide the static photo because the photo will already be in

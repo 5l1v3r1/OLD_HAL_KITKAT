@@ -33,13 +33,15 @@ import android.view.ViewGroup.MarginLayoutParams;
 import android.widget.FrameLayout.LayoutParams;
 import android.widget.ImageView;
 
-import com.android.contacts.common.ContactPhotoManager;
+import com.android.contacts.ContactPhotoManager;
 import com.android.contacts.ContactSaveService;
 import com.android.contacts.R;
 import com.android.contacts.detail.PhotoSelectionHandler;
 import com.android.contacts.editor.PhotoActionPopup;
-import com.android.contacts.common.model.RawContactDeltaList;
+import com.android.contacts.model.RawContactDeltaList;
+import com.android.contacts.util.ContactPhotoUtils;
 import com.android.contacts.util.SchedulingUtils;
+
 
 /**
  * Popup activity for choosing a contact photo within the Contacts app.
@@ -57,8 +59,8 @@ public class PhotoSelectionActivity extends Activity {
     /** Number of ms for the animation to hide the backdrop on finish. */
     private static final int BACKDROP_FADEOUT_DURATION = 100;
 
-    /** Key used to persist photo uri. */
-    private static final String KEY_CURRENT_PHOTO_URI = "currentphotouri";
+    /** Key used to persist photo-filename (NOT full file-path). */
+    private static final String KEY_CURRENT_PHOTO_FILE = "currentphotofile";
 
     /** Key used to persist whether a sub-activity is currently in progress. */
     private static final String KEY_SUB_ACTIVITY_IN_PROGRESS = "subinprogress";
@@ -149,16 +151,16 @@ public class PhotoSelectionActivity extends Activity {
     private PendingPhotoResult mPendingPhotoResult;
 
     /**
-     * The photo uri being interacted with, if any.  Saved/restored between activity instances.
+     * The photo file being interacted with, if any.  Saved/restored between activity instances.
      */
-    private Uri mCurrentPhotoUri;
+    private String mCurrentPhotoFile;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.photoselection_activity);
         if (savedInstanceState != null) {
-            mCurrentPhotoUri = savedInstanceState.getParcelable(KEY_CURRENT_PHOTO_URI);
+            mCurrentPhotoFile = savedInstanceState.getString(KEY_CURRENT_PHOTO_FILE);
             mSubActivityInProgress = savedInstanceState.getBoolean(KEY_SUB_ACTIVITY_IN_PROGRESS);
         }
 
@@ -178,7 +180,6 @@ public class PhotoSelectionActivity extends Activity {
 
         mBackdrop = findViewById(R.id.backdrop);
         mPhotoView = (ImageView) findViewById(R.id.photo);
-
         mSourceBounds = intent.getSourceBounds();
 
         // Fade in the background.
@@ -319,11 +320,11 @@ public class PhotoSelectionActivity extends Activity {
         if (mPhotoUri != null) {
             // If we have a URI, the bitmap should be cached directly.
             ContactPhotoManager.getInstance(this).loadPhoto(mPhotoView, mPhotoUri, photoWidth,
-                    false, null);
+                    false);
         } else {
-            // If we don't have a URI, just display an empty ImageView. The default image from the
-            // ContactDetailFragment will show up in the background instead.
-            mPhotoView.setImageDrawable(null);
+            // Fall back to avatar image.
+            mPhotoView.setImageResource(ContactPhotoManager.getDefaultAvatarResId(this, photoWidth,
+                    false));
         }
 
         mPhotoView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
@@ -455,7 +456,7 @@ public class PhotoSelectionActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putParcelable(KEY_CURRENT_PHOTO_URI, mCurrentPhotoUri);
+        outState.putString(KEY_CURRENT_PHOTO_FILE, mCurrentPhotoFile);
         outState.putBoolean(KEY_SUB_ACTIVITY_IN_PROGRESS, mSubActivityInProgress);
     }
 
@@ -526,27 +527,28 @@ public class PhotoSelectionActivity extends Activity {
         }
 
         @Override
-        public void startPhotoActivity(Intent intent, int requestCode, Uri photoUri) {
+        public void startPhotoActivity(Intent intent, int requestCode, String photoFile) {
             mSubActivityInProgress = true;
-            mCurrentPhotoUri = photoUri;
+            mCurrentPhotoFile = photoFile;
             PhotoSelectionActivity.this.startActivityForResult(intent, requestCode);
         }
 
         private final class PhotoListener extends PhotoActionListener {
             @Override
-            public void onPhotoSelected(Uri uri) {
+            public void onPhotoSelected(Bitmap bitmap) {
                 RawContactDeltaList delta = getDeltaForAttachingPhotoToContact();
                 long rawContactId = getWritableEntityId();
-
+                final String croppedPath = ContactPhotoUtils.pathForCroppedPhoto(
+                        PhotoSelectionActivity.this, mCurrentPhotoFile);
                 Intent intent = ContactSaveService.createSaveContactIntent(
-                        mContext, delta, "", 0, mIsProfile, null, null, rawContactId, uri);
+                        mContext, delta, "", 0, mIsProfile, null, null, rawContactId, croppedPath);
                 startService(intent);
                 finish();
             }
 
             @Override
-            public Uri getCurrentPhotoUri() {
-                return mCurrentPhotoUri;
+            public String getCurrentPhotoFile() {
+                return mCurrentPhotoFile;
             }
 
             @Override

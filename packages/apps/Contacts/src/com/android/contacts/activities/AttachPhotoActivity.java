@@ -20,7 +20,6 @@ import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.Loader;
 import android.content.Loader.OnLoadCompleteListener;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -33,18 +32,16 @@ import android.util.Log;
 
 import com.android.contacts.ContactSaveService;
 import com.android.contacts.ContactsActivity;
-import com.android.contacts.common.model.Contact;
-import com.android.contacts.common.model.ContactLoader;
-import com.android.contacts.common.model.RawContactDelta;
-import com.android.contacts.common.model.RawContactDeltaList;
-import com.android.contacts.common.model.RawContactModifier;
-import com.android.contacts.common.ContactsUtils;
-import com.android.contacts.common.model.account.AccountType;
-import com.android.contacts.common.model.ValuesDelta;
+import com.android.contacts.ContactsUtils;
+import com.android.contacts.model.Contact;
+import com.android.contacts.model.ContactLoader;
+import com.android.contacts.model.RawContactModifier;
+import com.android.contacts.model.RawContactDelta;
+import com.android.contacts.model.RawContactDeltaList;
+import com.android.contacts.model.account.AccountType;
 import com.android.contacts.util.ContactPhotoUtils;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 
 /**
  * Provides an external interface for other applications to attach images
@@ -60,17 +57,14 @@ public class AttachPhotoActivity extends ContactsActivity {
 
     private static final String KEY_CONTACT_URI = "contact_uri";
     private static final String KEY_TEMP_PHOTO_URI = "temp_photo_uri";
-    private static final String KEY_CROPPED_PHOTO_URI = "cropped_photo_uri";
 
+    private File mTempPhotoFile;
     private Uri mTempPhotoUri;
-    private Uri mCroppedPhotoUri;
 
     private ContentResolver mContentResolver;
 
     // Height and width (in pixels) to request for the photo - queried from the provider.
     private static int mPhotoDim;
-    // Default photo dimension to use if unable to query the provider.
-    private static final int mDefaultPhotoDim = 720;
 
     private Uri mContactUri;
 
@@ -81,11 +75,13 @@ public class AttachPhotoActivity extends ContactsActivity {
         if (icicle != null) {
             final String uri = icicle.getString(KEY_CONTACT_URI);
             mContactUri = (uri == null) ? null : Uri.parse(uri);
+
             mTempPhotoUri = Uri.parse(icicle.getString(KEY_TEMP_PHOTO_URI));
-            mCroppedPhotoUri = Uri.parse(icicle.getString(KEY_CROPPED_PHOTO_URI));
+            mTempPhotoFile = new File(mTempPhotoUri.getPath());
         } else {
-            mTempPhotoUri = ContactPhotoUtils.generateTempImageUri(this);
-            mCroppedPhotoUri = ContactPhotoUtils.generateTempCroppedImageUri(this);
+            mTempPhotoFile = ContactPhotoUtils.generateTempPhotoFile(this);
+            mTempPhotoUri = Uri.fromFile(mTempPhotoFile);
+
             Intent intent = new Intent(Intent.ACTION_PICK);
             intent.setType(Contacts.CONTENT_TYPE);
             startActivityForResult(intent, REQUEST_PICK_CONTACT);
@@ -93,77 +89,46 @@ public class AttachPhotoActivity extends ContactsActivity {
 
         mContentResolver = getContentResolver();
 
-        // Load the photo dimension to request. mPhotoDim is a static class
-        // member varible so only need to load this if this is the first time
-        // through.
-        if (mPhotoDim == 0) {
-            Cursor c = mContentResolver.query(DisplayPhoto.CONTENT_MAX_DIMENSIONS_URI,
-                    new String[]{DisplayPhoto.DISPLAY_MAX_DIM}, null, null, null);
-            if (c != null) {
-                try {
-                    if (c.moveToFirst()) {
-                        mPhotoDim = c.getInt(0);
-                    }
-                } finally {
-                    c.close();
-                }
-            }
+        // Load the photo dimension to request.
+        Cursor c = mContentResolver.query(DisplayPhoto.CONTENT_MAX_DIMENSIONS_URI,
+                new String[]{DisplayPhoto.DISPLAY_MAX_DIM}, null, null, null);
+        try {
+            c.moveToFirst();
+            mPhotoDim = c.getInt(0);
+        } finally {
+            c.close();
         }
     }
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        if (mContactUri != null) {
-            outState.putString(KEY_CONTACT_URI, mContactUri.toString());
-        }
-        if (mTempPhotoUri != null) {
-            outState.putString(KEY_TEMP_PHOTO_URI, mTempPhotoUri.toString());
-        }
-        if (mCroppedPhotoUri != null) {
-            outState.putString(KEY_CROPPED_PHOTO_URI, mCroppedPhotoUri.toString());
-        }
+        if (mContactUri != null) outState.putString(KEY_CONTACT_URI, mContactUri.toString());
+        outState.putString(KEY_TEMP_PHOTO_URI, mTempPhotoUri.toString());
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent result) {
+        if (resultCode != RESULT_OK) {
+            finish();
+            return;
+        }
+
         if (requestCode == REQUEST_PICK_CONTACT) {
-            if (resultCode != RESULT_OK) {
-                finish();
-                return;
-            }
             // A contact was picked. Launch the cropper to get face detection, the right size, etc.
             // TODO: get these values from constants somewhere
-            final Intent myIntent = getIntent();
-            final Uri inputUri = myIntent.getData();
-
-            final Uri toCrop;
-            // Save the URI into a temporary file provider URI so that
-            // we can add the FLAG_GRANT_WRITE_URI_PERMISSION flag to the eventual
-            // crop intent for read-only URI's.
-            // TODO: With b/10837468 fixed should be able to avoid this copy.
-            ContactPhotoUtils.savePhotoFromUriToUri(this, inputUri, mTempPhotoUri, false);
-            toCrop = mTempPhotoUri;
-
-            final Intent intent = new Intent("com.android.camera.action.CROP", toCrop);
+            Intent myIntent = getIntent();
+            Intent intent = new Intent("com.android.camera.action.CROP", myIntent.getData());
             if (myIntent.getStringExtra("mimeType") != null) {
-                intent.setDataAndType(toCrop, myIntent.getStringExtra("mimeType"));
+                intent.setDataAndType(myIntent.getData(), myIntent.getStringExtra("mimeType"));
             }
-            ContactPhotoUtils.addPhotoPickerExtras(intent, mCroppedPhotoUri);
-            ContactPhotoUtils.addCropExtras(intent, mPhotoDim != 0 ? mPhotoDim : mDefaultPhotoDim);
+            ContactPhotoUtils.addGalleryIntentExtras(intent, mTempPhotoUri, mPhotoDim);
 
             startActivityForResult(intent, REQUEST_CROP_PHOTO);
 
             mContactUri = result.getData();
 
         } else if (requestCode == REQUEST_CROP_PHOTO) {
-            // Delete the temporary photo from cache now that we have a cropped version.
-            // We should do this even if the crop failed and we eventually bail
-            getContentResolver().delete(mTempPhotoUri, null, null);
-            if (resultCode != RESULT_OK) {
-                finish();
-                return;
-            }
             loadContact(mContactUri, new Listener() {
                 @Override
                 public void onContactLoaded(Contact contact) {
@@ -217,30 +182,20 @@ public class AttachPhotoActivity extends ContactsActivity {
 
         // Create a scaled, compressed bitmap to add to the entity-delta list.
         final int size = ContactsUtils.getThumbnailSize(this);
-        Bitmap bitmap;
-        try {
-            bitmap = ContactPhotoUtils.getBitmapFromUri(this, mCroppedPhotoUri);
-        } catch (FileNotFoundException e) {
-            Log.w(TAG, "Could not find bitmap");
-            return;
-        }
-        if (bitmap == null) {
-            Log.w(TAG, "Could not decode bitmap");
-            return;
-        }
-
+        final Bitmap bitmap = BitmapFactory.decodeFile(mTempPhotoFile.getAbsolutePath());
         final Bitmap scaled = Bitmap.createScaledBitmap(bitmap, size, size, false);
         final byte[] compressed = ContactPhotoUtils.compressBitmap(scaled);
         if (compressed == null) {
             Log.w(TAG, "could not create scaled and compressed Bitmap");
             return;
         }
+
         // Add compressed bitmap to entity-delta... this allows us to save to
         // a new contact; otherwise the entity-delta-list would be empty, and
         // the ContactSaveService would not create the new contact, and the
         // full-res photo would fail to be saved to the non-existent contact.
         AccountType account = raw.getRawContactAccountType(this);
-        ValuesDelta values =
+        RawContactDelta.ValuesDelta values =
                 RawContactModifier.ensureKindExists(raw, account, Photo.CONTENT_ITEM_TYPE);
         if (values == null) {
             Log.w(TAG, "cannot attach photo to this account type");
@@ -257,8 +212,7 @@ public class AttachPhotoActivity extends ContactsActivity {
                 contact.isUserProfile(),
                 null, null,
                 raw.getRawContactId(),
-                mCroppedPhotoUri
-                );
+                mTempPhotoFile.getAbsolutePath());
         startService(intent);
         finish();
     }

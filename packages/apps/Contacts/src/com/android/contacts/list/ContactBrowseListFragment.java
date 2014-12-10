@@ -35,12 +35,9 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.common.widget.CompositeCursorAdapter.Partition;
-import com.android.contacts.common.list.AutoScrollListView;
-import com.android.contacts.common.list.ContactEntryListFragment;
-import com.android.contacts.common.list.ContactListAdapter;
-import com.android.contacts.common.list.ContactListFilter;
-import com.android.contacts.common.list.DirectoryPartition;
-import com.android.contacts.common.util.ContactLoaderUtils;
+import com.android.contacts.R;
+import com.android.contacts.util.ContactLoaderUtils;
+import com.android.contacts.widget.AutoScrollListView;
 
 import java.util.List;
 
@@ -276,6 +273,25 @@ public abstract class ContactBrowseListFragment extends
         checkSelection();
     }
 
+    @Override
+    protected void prepareEmptyView() {
+        if (isSearchMode()) {
+            return;
+        } else if (isSyncActive()) {
+            if (hasIccCard()) {
+                setEmptyText(R.string.noContactsHelpTextWithSync);
+            } else {
+                setEmptyText(R.string.noContactsNoSimHelpTextWithSync);
+            }
+        } else {
+            if (hasIccCard()) {
+                setEmptyText(R.string.noContactsHelpText);
+            } else {
+                setEmptyText(R.string.noContactsNoSimHelpText);
+            }
+        }
+    }
+
     public Uri getSelectedContactUri() {
         return mSelectedContactUri;
     }
@@ -474,15 +490,8 @@ public abstract class ContactBrowseListFragment extends
                 mSelectionRequired = false;
 
                 // If we were looking at a different specific contact, just reload
-                // FILTER_TYPE_ALL_ACCOUNTS is needed for the case where a new contact is added
-                // on a tablet and the loader is returning a stale list.  In this case, the contact
-                // will not be found until the next load. b/7621855 This will only fix the most
-                // common case where all accounts are shown. It will not fix the one account case.
-                // TODO: we may want to add more FILTER_TYPEs or relax this check to fix all other
-                // FILTER_TYPE cases.
                 if (mFilter != null
-                        && (mFilter.filterType == ContactListFilter.FILTER_TYPE_SINGLE_CONTACT
-                        || mFilter.filterType == ContactListFilter.FILTER_TYPE_ALL_ACCOUNTS)) {
+                        && mFilter.filterType == ContactListFilter.FILTER_TYPE_SINGLE_CONTACT) {
                     reloadData();
                 } else {
                     // Otherwise, call the listener, which will adjust the filter.
@@ -620,6 +629,14 @@ public abstract class ContactBrowseListFragment extends
 
     public void removeFromFavorites(Uri contactUri) {
         if (mListener != null) mListener.onRemoveFromFavoritesAction(contactUri);
+    }
+
+    public void callContact(Uri contactUri) {
+        if (mListener != null) mListener.onCallContactAction(contactUri);
+    }
+
+    public void smsContact(Uri contactUri) {
+        if (mListener != null) mListener.onSmsContactAction(contactUri);
     }
 
     private void notifyInvalidSelection() {

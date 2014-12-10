@@ -92,7 +92,6 @@ public class DataRowHandlerForNickname extends DataRowHandlerForCommonDataKind {
 
     @Override
     public void appendSearchableData(IndexBuilder builder) {
-        builder.appendNameFromColumn(Nickname.NAME);
         builder.appendContentFromColumn(Nickname.NAME);
     }
 }

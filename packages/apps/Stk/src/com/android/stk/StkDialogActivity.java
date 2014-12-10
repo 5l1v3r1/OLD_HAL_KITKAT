@@ -126,7 +126,7 @@ public class StkDialogActivity extends Activity implements View.OnClickListener 
     @Override
     public void onResume() {
         super.onResume();
-        startTimeOut(mTextMsg.userClear);
+        startTimeOut();
     }
 
     @Override
@@ -175,18 +175,12 @@ public class StkDialogActivity extends Activity implements View.OnClickListener 
         mTimeoutHandler.removeMessages(MSG_ID_TIMEOUT);
     }
 
-    private void startTimeOut(boolean waitForUserToClear) {
+    private void startTimeOut() {
         // Reset timeout.
         cancelTimeOut();
         int dialogDuration = StkApp.calculateDurationInMilis(mTextMsg.duration);
-        // If duration is specified, this has priority. If not, set timeout
-        // according to condition given by the card.
         if (dialogDuration == 0) {
-            if (waitForUserToClear) {
-                dialogDuration = StkApp.DISP_TEXT_WAIT_FOR_USER_TIMEOUT;
-            } else {
-                dialogDuration = StkApp.DISP_TEXT_CLEAR_AFTER_DELAY_TIMEOUT;
-            }
+            dialogDuration = StkApp.UI_TIMEOUT;
         }
         mTimeoutHandler.sendMessageDelayed(mTimeoutHandler
                 .obtainMessage(MSG_ID_TIMEOUT), dialogDuration);

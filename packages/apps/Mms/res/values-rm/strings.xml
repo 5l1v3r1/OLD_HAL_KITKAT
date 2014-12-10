@@ -100,10 +100,6 @@
     <skip />
     <!-- no translation found for open_keyboard_to_compose_message (7860109685511253191) -->
     <skip />
-    <!-- no translation found for sending_disabled_not_default_app (6685337318181265136) -->
-    <skip />
-    <!-- no translation found for compose_disabled_toast (1838175321052707875) -->
-    <skip />
     <string name="compressing" msgid="1961357529661045180">"Il maletg è memia grond. Cumpressiun en process…"</string>
     <!-- no translation found for unsupported_media_format (1350489690977363764) -->
     <skip />
@@ -188,14 +184,6 @@
     <skip />
     <!-- no translation found for pref_sms_storage_title (9001233319190616445) -->
     <skip />
-    <!-- no translation found for pref_title_sms_disabled (1441894740130104326) -->
-    <skip />
-    <!-- no translation found for pref_summary_sms_disabled (8975773722051230744) -->
-    <skip />
-    <!-- no translation found for pref_title_sms_enabled (1857849790200375277) -->
-    <skip />
-    <!-- no translation found for pref_summary_sms_enabled (2106125420361911250) -->
-    <skip />
     <string name="pref_summary_manage_sim_messages" msgid="4141349892597640864">"Administrar ils messadis memorisads sin Vossa carta SIM"</string>
     <string name="pref_summary_mms_delivery_reports" msgid="4874657984217756112">"Dumandar ina conferma da retschavida per mintga messadi tramess"</string>
     <string name="pref_summary_mms_read_reports" msgid="2748323864008907440">"Dumandar ina conferma da lectura per mintga messadi tramess"</string>
@@ -214,12 +202,18 @@
     <string name="pref_title_sms_delete" msgid="6890538316799296878">"Limita dad SMS"</string>
     <string name="pref_title_mms_delete" msgid="7265878070847351664">"Limita per ils MMS"</string>
     <string name="pref_title_notification_enabled" msgid="9118792213953729414">"Avis"</string>
+    <string name="pref_summary_notification_enabled" msgid="619729096820999905">"Mussar in avis en la trav da status en cas da l\'entrada da novs messadis"</string>
     <string name="pref_title_notification_vibrateWhen" msgid="4251208067092761057">"Vibrar"</string>
-    <!-- no translation found for pref_title_notification_ringtone (8667533917574559659) -->
+    <string name="pref_summary_notification_vibrateWhen" msgid="669655090822561447">"Era vibrar cun ils avis"</string>
+    <!-- no translation found for pref_title_notification_ringtone (5467265237106229952) -->
     <skip />
     <string name="pref_messages_to_save" msgid="3202539743892934926">"Definir il dumber da messadis per memorisar"</string>
-    <!-- no translation found for silent_ringtone (7981237991326592780) -->
-    <skip />
+  <string-array name="prefEntries_vibrateWhen">
+    <item msgid="2520871831815631409">"Adina"</item>
+    <item msgid="6069709696037750627">"Mo sche silenzius"</item>
+    <item msgid="7486145357487111435">"Mai"</item>
+  </string-array>
+    <string name="prefDialogTitle_vibrateWhen" msgid="6419655771690242118">"Vibrar"</string>
     <string name="pref_title_mms_auto_retrieval" msgid="4021878285474431355">"Retschaiver automaticamain"</string>
     <string name="pref_summary_mms_auto_retrieval" msgid="925163257363757048">"Retschaiver automaticamain ils messadis"</string>
     <string name="pref_title_mms_retrieval_during_roaming" msgid="6016227402731817804">"Retschaiver autom. cun roaming"</string>
@@ -337,8 +331,6 @@
     <skip />
     <!-- no translation found for download_later (5531365714424360903) -->
     <skip />
-    <!-- no translation found for no_apn (505932916503312015) -->
-    <skip />
     <!-- no translation found for select_audio (3528161449756771832) -->
     <skip />
     <!-- no translation found for copy_to_sdcard (757028609638184856) -->
@@ -352,6 +344,7 @@
     <skip />
     <!-- no translation found for saved_ringtone_fail (4778500070919251116) -->
     <skip />
+    <string name="menu_insert_smiley" msgid="4964504393061025071">"Inserir in emoticon"</string>
     <!-- no translation found for menu_group_participants (4288356090262299071) -->
     <skip />
     <!-- no translation found for select_link_title (3371818607625768447) -->
@@ -430,19 +423,5 @@
     <!-- no translation found for enumeration_comma (213598026698964628) -->
     <skip />
     <!-- no translation found for message_timestamp_format (4188999027493614617) -->
-    <skip />
-    <!-- no translation found for storage_warning_title (7124740686325942375) -->
-    <skip />
-    <!-- no translation found for storage_warning_content (1100367816649962354) -->
-    <skip />
-    <!-- no translation found for label_mms_send_outbox_msg (3395185162973061099) -->
-    <skip />
-    <!-- no translation found for desc_mms_send_outbox_msg (1837156781311437148) -->
-    <skip />
-    <!-- no translation found for banner_sms_promo_title_initial (510014388581481569) -->
-    <skip />
-    <!-- no translation found for banner_sms_promo_title_application (8123569785369713254) -->
-    <skip />
-    <!-- no translation found for banner_sms_promo_message (3536714414252763826) -->
     <skip />
 </resources>

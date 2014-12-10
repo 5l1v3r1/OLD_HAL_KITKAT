@@ -26,8 +26,6 @@ import android.content.pm.PackageManager;
 import android.os.RemoteException;
 import android.util.Log;
 
-import libcore.icu.ICU;
-
 /**
  * This will be launched during system boot, after the core system has
  * been brought up but before any non-persistent processes have been
@@ -41,7 +39,6 @@ import libcore.icu.ICU;
 public class ContactsUpgradeReceiver extends BroadcastReceiver {
     static final String TAG = "ContactsUpgradeReceiver";
     static final String PREF_DB_VERSION = "db_version";
-    static final String PREF_ICU_VERSION = "icu_version";
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -53,37 +50,33 @@ public class ContactsUpgradeReceiver extends BroadcastReceiver {
 
             // Lookup the last known database version
             SharedPreferences prefs = context.getSharedPreferences(TAG, Context.MODE_PRIVATE);
-            int prefDbVersion = prefs.getInt(PREF_DB_VERSION, 0);
-            final String curIcuVersion = ICU.getIcuVersion();
-            final String prefIcuVersion = prefs.getString(PREF_ICU_VERSION, "");
+            int prefVersion = prefs.getInt(PREF_DB_VERSION, 0);
 
             // If the version is old go ahead and attempt to create or upgrade the database.
-            if (prefDbVersion != ContactsDatabaseHelper.DATABASE_VERSION ||
-                    !prefIcuVersion.equals(curIcuVersion)) {
+            if (prefVersion != ContactsDatabaseHelper.DATABASE_VERSION) {
                 // Store the current version so this receiver isn't run again until the database
                 // version number changes. This is intentionally done even before the upgrade path
                 // is attempted to be conservative. If the upgrade fails for some reason and we
                 // crash and burn we don't want to get into a loop doing so.
-                SharedPreferences.Editor editor = prefs.edit();
-                editor.putInt(PREF_DB_VERSION, ContactsDatabaseHelper.DATABASE_VERSION);
-                editor.putString(PREF_ICU_VERSION, curIcuVersion);
-                editor.commit();
+                prefs.edit().putInt(
+                    PREF_DB_VERSION, ContactsDatabaseHelper.DATABASE_VERSION).commit();
 
                 // Ask for a reference to the database to force the helper to either
                 // create the database or open it up, performing any necessary upgrades
                 // in the process.
                 ContactsDatabaseHelper helper = ContactsDatabaseHelper.getInstance(context);
-                ProfileDatabaseHelper profileHelper = ProfileDatabaseHelper.getInstance(context);
-                Log.i(TAG, "Creating or opening contacts database");
-                try {
-                    ActivityManagerNative.getDefault().showBootMessage(
-                            context.getText(R.string.upgrade_msg), true);
-                } catch (RemoteException e) {
+                if (context.getDatabasePath(helper.getDatabaseName()).exists()) {
+                    Log.i(TAG, "Creating or opening contacts database");
+                    try {
+                        ActivityManagerNative.getDefault().showBootMessage(
+                                context.getText(R.string.upgrade_msg), true);
+                    } catch (RemoteException e) {
+                    }
+                    helper.getWritableDatabase();
                 }
 
-                helper.getWritableDatabase();
+                ProfileDatabaseHelper profileHelper = ProfileDatabaseHelper.getInstance(context);
                 profileHelper.getWritableDatabase();
-                ContactsProvider2.updateLocaleOffline(context, helper, profileHelper);
 
                 // Log the total time taken for the receiver to perform the operation
                 EventLogTags.writeContactsUpgradeReceiver(System.currentTimeMillis() - startTime);

@@ -20,7 +20,6 @@ import android.app.IntentService;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -39,6 +38,8 @@ public class NoConfirmationSendService extends IntentService {
         setIntentRedelivery(true);
     }
 
+    public static final String SEND_NO_CONFIRM_INTENT_ACTION =
+        "com.android.mms.intent.action.SENDTO_NO_CONFIRMATION";
     private static final String TAG = "Mms/NoConfirmationSendService";
 
     @Override
@@ -46,7 +47,7 @@ public class NoConfirmationSendService extends IntentService {
         ComposeMessageActivity.log("NoConfirmationSendService onHandleIntent");
 
         String action = intent.getAction();
-        if (!TelephonyManager.ACTION_RESPOND_VIA_MESSAGE.equals(action)) {
+        if (!SEND_NO_CONFIRM_INTENT_ACTION.equals(action)) {
             ComposeMessageActivity.log("NoConfirmationSendService onHandleIntent wrong action: " +
                     action);
             return;

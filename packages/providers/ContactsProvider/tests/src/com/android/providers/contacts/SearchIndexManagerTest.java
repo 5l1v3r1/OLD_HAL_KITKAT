@@ -29,9 +29,6 @@ import android.test.MoreAsserts;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.Suppress;
 
-import com.android.providers.contacts.testutil.DataUtil;
-import com.android.providers.contacts.testutil.RawContactUtil;
-
 import java.text.Collator;
 import java.util.Arrays;
 import java.util.Locale;
@@ -49,12 +46,12 @@ import java.util.Locale;
 public class SearchIndexManagerTest extends BaseContactsProvider2Test {
 
     public void testSearchIndexForStructuredName() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
-        DataUtil.insertStructuredName(mResolver, rawContactId, "John", "Doe");
+        insertStructuredName(rawContactId, "John", "Doe");
         ContentValues values = new ContentValues();
         values.put(StructuredName.DISPLAY_NAME, "Bob I. Parr");
-        DataUtil.insertStructuredName(mResolver, rawContactId, values);
+        insertStructuredName(rawContactId, values);
         values.clear();
         values.put(StructuredName.PREFIX, "Mrs.");
         values.put(StructuredName.GIVEN_NAME, "Helen");
@@ -63,7 +60,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
         values.put(StructuredName.SUFFIX, "PhD");
         values.put(StructuredName.PHONETIC_FAMILY_NAME, "par");
         values.put(StructuredName.PHONETIC_GIVEN_NAME, "helen");
-        DataUtil.insertStructuredName(mResolver, rawContactId, values);
+        insertStructuredName(rawContactId, values);
 
         assertSearchIndex(
                 contactId, null, "John Doe Bob I Parr Helen I Parr PhD par helen parhelen", null);
@@ -75,11 +72,11 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
             return;
         }
 
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         ContentValues values = new ContentValues();
         values.put(StructuredName.DISPLAY_NAME, "\u695A\u8FAD");    // CHUCI
-        DataUtil.insertStructuredName(mResolver, rawContactId, values);
+        insertStructuredName(rawContactId, values);
 
         assertSearchIndex(
                 contactId, null, "\u695A\u8FAD \u695A\u8FAD CI \u8FAD CHUCI CC C", null);
@@ -90,12 +87,11 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
         if (!Arrays.asList(Collator.getAvailableLocales()).contains(Locale.CHINA)) {
             return;
         }
-        ContactLocaleUtils.setLocale(Locale.SIMPLIFIED_CHINESE);
 
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         ContentValues values = new ContentValues();
         values.put(StructuredName.DISPLAY_NAME, "\u695A\u8FAD");    // CHUCI
-        DataUtil.insertStructuredName(mResolver, rawContactId, values);
+        insertStructuredName(rawContactId, values);
 
         assertStoredValue(buildSearchUri("\u695A\u8FAD"), SearchSnippetColumns.SNIPPET, null);
         assertStoredValue(buildSearchUri("\u8FAD"), SearchSnippetColumns.SNIPPET, null);
@@ -111,11 +107,11 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
             return;
         }
 
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         ContentValues values = new ContentValues();
         values.put(StructuredName.DISPLAY_NAME, "\uC774\uC0C1\uC77C");    // Lee Sang Il
-        DataUtil.insertStructuredName(mResolver, rawContactId, values);
+        insertStructuredName(rawContactId, values);
 
         assertSearchIndex(contactId, null,
                 "\uC774\uC0C1\uC77C \uC0C1\uC77C \u1109\u110B \u110B\u1109\u110B", null);
@@ -127,10 +123,10 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
             return;
         }
 
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         ContentValues values = new ContentValues();
         values.put(StructuredName.DISPLAY_NAME, "\uC774\uC0C1\uC77C");   // Lee Sang Il
-        DataUtil.insertStructuredName(mResolver, rawContactId, values);
+        insertStructuredName(rawContactId, values);
 
         // Full name: Lee Sang Il
         assertStoredValue(buildSearchUri("\uC774\uC0C1\uC77C"), SearchSnippetColumns.SNIPPET, null);
@@ -151,13 +147,13 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
             return;
         }
 
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
 
         // Sun Woo Young Nyeu
         ContentValues values = new ContentValues();
         values.put(StructuredName.DISPLAY_NAME, "\uC120\uC6B0\uC6A9\uB140");
 
-        DataUtil.insertStructuredName(mResolver, rawContactId, values);
+        insertStructuredName(rawContactId, values);
 
         // Full name: Sun Woo Young Nyeu
         assertStoredValue(
@@ -175,7 +171,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchIndexForOrganization() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         ContentValues values = new ContentValues();
         values.put(Organization.COMPANY, "Acme Inc.");
@@ -193,7 +189,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchIndexForPhoneNumber() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         insertPhoneNumber(rawContactId, "800555GOOG");
         insertPhoneNumber(rawContactId, "8005551234");
@@ -202,7 +198,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchIndexForEmail() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         insertEmail(rawContactId, "Bob Parr <incredible@android.com>");
         insertEmail(rawContactId, "bob_parr@android.com");
@@ -212,7 +208,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchIndexForNickname() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         insertNickname(rawContactId, "incredible");
 
@@ -220,7 +216,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchIndexForStructuredPostal() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         insertPostalAddress(rawContactId, "1600 Amphitheatre Pkwy\nMountain View, CA 94043");
         ContentValues values = new ContentValues();
@@ -235,7 +231,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchIndexForIm() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         insertImHandle(rawContactId, Im.PROTOCOL_JABBER, null, "bp@android.com");
         insertImHandle(rawContactId, Im.PROTOCOL_CUSTOM, "android_im", "android@android.com");
@@ -245,7 +241,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchIndexForNote() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         long contactId = queryContactId(rawContactId);
         insertNote(rawContactId, "Please note: three notes or more make up a chord.");
 
@@ -254,7 +250,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSnippetArgs() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         insertNote(rawContactId, "Please note: three notes or more make up a chord.");
 
         assertStoredValue(
@@ -263,12 +259,12 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testEmptyFilter() {
-        RawContactUtil.createRawContactWithName(mResolver, "John", "Doe");
+        createRawContactWithName("John", "Doe");
         assertEquals(0, getCount(buildSearchUri(""), null, null));
     }
 
     public void testSearchByName() {
-        RawContactUtil.createRawContactWithName(mResolver, "John Jay", "Doe");
+        createRawContactWithName("John Jay", "Doe");
 
         // We are supposed to find the contact, but return a null snippet
         assertStoredValue(buildSearchUri("john"), SearchSnippetColumns.SNIPPET, null);
@@ -277,7 +273,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchByPrefixName() {
-        RawContactUtil.createRawContactWithName(mResolver, "John Jay", "Doe");
+        createRawContactWithName("John Jay", "Doe");
 
         // prefix searches
         assertStoredValue(buildSearchUri("jo ja"), SearchSnippetColumns.SNIPPET, null);
@@ -286,7 +282,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testGermanUmlautFullameCapitalizationSearch() {
-        RawContactUtil.createRawContactWithName(mResolver, "Matthäus BJÖRN Bünyamin", "Reißer");
+        createRawContactWithName("Matthäus BJÖRN Bünyamin", "Reißer");
 
         // make sure we can find those, independent of the capitalization
         assertStoredValue(buildSearchUri("matthäus"), SearchSnippetColumns.SNIPPET, null);
@@ -374,7 +370,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testNameWithHyphen() {
-        RawContactUtil.createRawContactWithName(mResolver, "First", "Last-name");
+        createRawContactWithName("First", "Last-name");
 
         assertStoredValue(buildSearchUri("First"), SearchSnippetColumns.SNIPPET, null);
         assertStoredValue(buildSearchUri("Last"), SearchSnippetColumns.SNIPPET, null);
@@ -391,7 +387,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
 
     /** Same as {@link #testNameWithHyphen} except the name has double hyphens. */
     public void testNameWithDoubleHyphens() {
-        RawContactUtil.createRawContactWithName(mResolver, "First", "Last--name");
+        createRawContactWithName("First", "Last--name");
 
         assertStoredValue(buildSearchUri("First"), SearchSnippetColumns.SNIPPET, null);
         assertStoredValue(buildSearchUri("Last"), SearchSnippetColumns.SNIPPET, null);
@@ -404,7 +400,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testNameWithPunctuations() {
-        RawContactUtil.createRawContactWithName(mResolver, "First", "O'Neill");
+        createRawContactWithName("First", "O'Neill");
 
         assertStoredValue(buildSearchUri("first"), SearchSnippetColumns.SNIPPET, null);
         assertStoredValue(buildSearchUri("oneill"), SearchSnippetColumns.SNIPPET, null);
@@ -412,7 +408,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchByEmailAddress() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         insertPhoneNumber(rawContactId, "1234567890");
         insertEmail(rawContactId, "john@doe.com");
         insertNote(rawContactId, "a hundred dollar note for doe@john.com and bob parr");
@@ -425,7 +421,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     public void testSearchByPhoneNumber() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         insertPhoneNumber(rawContactId, "330142685300");
         insertPhoneNumber(rawContactId, "(800)GOOG-123");
         insertEmail(rawContactId, "john@doe.com");
@@ -447,7 +443,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
      * Test case for bug 5904515
      */
     public void testSearchByPhoneNumber_diferSnippetting() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         insertPhoneNumber(rawContactId, "505-123-4567");
 
         // The bug happened with the old code only when we use \u0001 as the snippet marker.
@@ -465,7 +461,7 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
      * there's no visible breakage.)
      */
     public void testSearchByEmail_diferSnippetting() {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         insertEmail(rawContactId, "john@doe.com");
 
         assertStoredValue(buildSearchUri("john", "\u0001,\u0001,\u2026,5", true),
@@ -509,10 +505,10 @@ public class SearchIndexManagerTest extends BaseContactsProvider2Test {
     }
 
     private void createRawContactWithDisplayName(String name) {
-        long rawContactId = RawContactUtil.createRawContact(mResolver);
+        long rawContactId = createRawContact();
         ContentValues values = new ContentValues();
         values.put(StructuredName.DISPLAY_NAME, name);
-        DataUtil.insertStructuredName(mResolver, rawContactId, values);
+        insertStructuredName(rawContactId, values);
     }
 
     // TODO: expectedName must be tested. Many tests in here are quite useless at the moment

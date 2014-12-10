@@ -24,7 +24,6 @@ import android.provider.ContactsContract.RawContacts;
 import android.test.suitebuilder.annotation.MediumTest;
 
 import com.android.providers.contacts.ContactLookupKey.LookupKeySegment;
-import com.android.providers.contacts.testutil.RawContactUtil;
 
 import java.util.ArrayList;
 
@@ -41,8 +40,8 @@ import java.util.ArrayList;
 public class ContactLookupKeyTest extends BaseContactsProvider2Test {
 
     public void testLookupKeyUsingDisplayNameAndNoAccount() {
-        long rawContactId1 = RawContactUtil.createRawContactWithName(mResolver, "John", "Doe");
-        long rawContactId2 = RawContactUtil.createRawContactWithName(mResolver, "johndoe", null);
+        long rawContactId1 = createRawContactWithName("John", "Doe");
+        long rawContactId2 = createRawContactWithName("johndoe", null);
         setAggregationException(
                 AggregationExceptions.TYPE_KEEP_TOGETHER, rawContactId1, rawContactId2);
 
@@ -69,13 +68,13 @@ public class ContactLookupKeyTest extends BaseContactsProvider2Test {
     }
 
     public void testLookupKeyUsingSourceIdAndNoAccount() {
-        long rawContactId1 = RawContactUtil.createRawContactWithName(mResolver, "John", "Doe");
+        long rawContactId1 = createRawContactWithName("John", "Doe");
         storeValue(RawContacts.CONTENT_URI, rawContactId1, RawContacts.SOURCE_ID, "123");
 
-        long rawContactId2 = RawContactUtil.createRawContactWithName(mResolver, "johndoe", null);
+        long rawContactId2 = createRawContactWithName("johndoe", null);
         storeValue(RawContacts.CONTENT_URI, rawContactId2, RawContacts.SOURCE_ID, "4.5.6");
 
-        long rawContactId3 = RawContactUtil.createRawContactWithName(mResolver, "john", "dough");
+        long rawContactId3 = createRawContactWithName("john", "dough");
         storeValue(RawContacts.CONTENT_URI, rawContactId3, RawContacts.SOURCE_ID, "http://foo?bar");
 
         setAggregationException(
@@ -95,12 +94,12 @@ public class ContactLookupKeyTest extends BaseContactsProvider2Test {
     }
 
     public void testLookupKeySameSourceIdDifferentAccounts() {
-        long rawContactId1 = RawContactUtil.createRawContactWithName(mResolver, "Dear", "Doe");
+        long rawContactId1 = createRawContactWithName("Dear", "Doe");
         storeValue(RawContacts.CONTENT_URI, rawContactId1, RawContacts.ACCOUNT_TYPE, "foo");
         storeValue(RawContacts.CONTENT_URI, rawContactId1, RawContacts.ACCOUNT_NAME, "FOO");
         storeValue(RawContacts.CONTENT_URI, rawContactId1, RawContacts.SOURCE_ID, "1");
 
-        long rawContactId2 = RawContactUtil.createRawContactWithName(mResolver, "Deer", "Dough");
+        long rawContactId2 = createRawContactWithName("Deer", "Dough");
         storeValue(RawContacts.CONTENT_URI, rawContactId2, RawContacts.ACCOUNT_TYPE, "bar");
         storeValue(RawContacts.CONTENT_URI, rawContactId2, RawContacts.ACCOUNT_NAME, "BAR");
         storeValue(RawContacts.CONTENT_URI, rawContactId2, RawContacts.SOURCE_ID, "1");
@@ -126,13 +125,13 @@ public class ContactLookupKeyTest extends BaseContactsProvider2Test {
     }
 
     public void testLookupKeyChoosingLargestContact() {
-        long rawContactId1 = RawContactUtil.createRawContactWithName(mResolver, "John", "Doe");
+        long rawContactId1 = createRawContactWithName("John", "Doe");
         storeValue(RawContacts.CONTENT_URI, rawContactId1, RawContacts.SOURCE_ID, "1");
 
-        long rawContactId2 = RawContactUtil.createRawContactWithName(mResolver, "John", "Doe");
+        long rawContactId2 = createRawContactWithName("John", "Doe");
         storeValue(RawContacts.CONTENT_URI, rawContactId2, RawContacts.SOURCE_ID, "2");
 
-        long rawContactId3 = RawContactUtil.createRawContactWithName(mResolver, "John", "Doe");
+        long rawContactId3 = createRawContactWithName("John", "Doe");
         storeValue(RawContacts.CONTENT_URI, rawContactId3, RawContacts.SOURCE_ID, "3");
         setAggregationException(
                 AggregationExceptions.TYPE_KEEP_TOGETHER, rawContactId1, rawContactId2);
@@ -166,7 +165,7 @@ public class ContactLookupKeyTest extends BaseContactsProvider2Test {
     }
 
     public void testGetLookupUri() {
-        long rawContactId1 = RawContactUtil.createRawContactWithName(mResolver, "John", "Doe");
+        long rawContactId1 = createRawContactWithName("John", "Doe");
         storeValue(RawContacts.CONTENT_URI, rawContactId1, RawContacts.SOURCE_ID, "1");
 
         long contactId = queryContactId(rawContactId1);

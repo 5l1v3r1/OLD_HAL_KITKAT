@@ -60,21 +60,18 @@ import android.widget.Toast;
 
 import com.android.contacts.R;
 import com.android.contacts.editor.Editor;
-import com.android.contacts.editor.EditorUiUtils;
 import com.android.contacts.editor.ViewIdGenerator;
-import com.android.contacts.common.ContactPhotoManager;
-import com.android.contacts.common.ContactPhotoManager.DefaultImageRequest;
-import com.android.contacts.common.model.AccountTypeManager;
-import com.android.contacts.common.model.RawContact;
-import com.android.contacts.common.model.RawContactDelta;
-import com.android.contacts.common.model.ValuesDelta;
-import com.android.contacts.common.model.RawContactDeltaList;
-import com.android.contacts.common.model.RawContactModifier;
-import com.android.contacts.common.model.account.AccountType;
-import com.android.contacts.common.model.account.AccountWithDataSet;
-import com.android.contacts.common.model.dataitem.DataKind;
+import com.android.contacts.model.AccountTypeManager;
+import com.android.contacts.model.RawContact;
+import com.android.contacts.model.RawContactDelta;
+import com.android.contacts.model.RawContactDelta.ValuesDelta;
+import com.android.contacts.model.RawContactDeltaList;
+import com.android.contacts.model.RawContactModifier;
+import com.android.contacts.model.account.AccountType;
+import com.android.contacts.model.account.AccountWithDataSet;
+import com.android.contacts.model.dataitem.DataKind;
 import com.android.contacts.util.DialogManager;
-import com.android.contacts.common.util.EmptyService;
+import com.android.contacts.util.EmptyService;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -123,7 +120,6 @@ public class ConfirmAddDetailActivity extends Activity implements
     private Uri mContactUri;
     private long mContactId;
     private String mDisplayName;
-    private String mLookupKey;
     private boolean mIsReadOnly;
 
     private QueryHandler mQueryHandler;
@@ -271,9 +267,6 @@ public class ConfirmAddDetailActivity extends Activity implements
         // Retrieve references to all the Views in the dialog activity.
         mDisplayNameView = (TextView) findViewById(R.id.name);
         mPhotoView = (ImageView) findViewById(R.id.photo);
-        mPhotoView.setImageDrawable(ContactPhotoManager.getDefaultAvatarDrawableForContact(
-                getResources(), false, null));
-
         mEditorContainerView = (ViewGroup) findViewById(R.id.editor_container);
 
         resetAsyncQueryHandler();
@@ -485,8 +478,6 @@ public class ConfirmAddDetailActivity extends Activity implements
                         if (cursor != null && cursor.moveToFirst()) {
                             // Get the cursor values
                             mDisplayName = cursor.getString(ContactQuery.DISPLAY_NAME);
-                            mLookupKey = cursor.getString(ContactQuery.LOOKUP_KEY);
-                            setDefaultContactImage(mDisplayName, mLookupKey);
                             final long photoId = cursor.getLong(ContactQuery.PHOTO_ID);
 
                             // If there is no photo ID, then do a disambiguation
@@ -497,7 +488,8 @@ public class ConfirmAddDetailActivity extends Activity implements
                                 startDisambiguationQuery(mDisplayName);
                             } else {
                                 // Otherwise do the photo query.
-                                Uri lookupUri = Contacts.getLookupUri(mContactId, mLookupKey);
+                                Uri lookupUri = Contacts.getLookupUri(mContactId,
+                                        cursor.getString(ContactQuery.LOOKUP_KEY));
                                 startPhotoQuery(photoId, lookupUri);
                                 // Display the name because there is no
                                 // disambiguation query.
@@ -638,7 +630,7 @@ public class ConfirmAddDetailActivity extends Activity implements
                 editableAccount.type, editableAccount.dataSet);
 
         // Create a new RawContactDelta for the new raw_contact.
-        final RawContact rawContact = new RawContact();
+        final RawContact rawContact = new RawContact(context);
         rawContact.setAccount(editableAccount);
 
         final RawContactDelta entityDelta = new RawContactDelta(ValuesDelta.fromAfter(
@@ -690,15 +682,12 @@ public class ConfirmAddDetailActivity extends Activity implements
             // Skip kind that are not editable
             if (!kind.editable) continue;
             if (mMimetype.equals(kind.mimeType)) {
-                final ArrayList<ValuesDelta> deltas = mRawContactDelta.getMimeEntries(mMimetype);
-                if (deltas != null) {
-                    for (ValuesDelta valuesDelta : deltas) {
-                        // Skip entries that aren't visible
-                        if (!valuesDelta.isVisible()) continue;
-                        if (valuesDelta.isInsert()) {
-                            inflateEditorView(kind, valuesDelta, mRawContactDelta);
-                            return;
-                        }
+                for (ValuesDelta valuesDelta : mRawContactDelta.getMimeEntries(mMimetype)) {
+                    // Skip entries that aren't visible
+                    if (!valuesDelta.isVisible()) continue;
+                    if (valuesDelta.isInsert()) {
+                        inflateEditorView(kind, valuesDelta, mRawContactDelta);
+                        return;
                     }
                 }
             }
@@ -711,8 +700,7 @@ public class ConfirmAddDetailActivity extends Activity implements
      * to the end of mEditors
      */
     private void inflateEditorView(DataKind dataKind, ValuesDelta valuesDelta, RawContactDelta state) {
-        final int layoutResId = EditorUiUtils.getLayoutResourceId(dataKind.mimeType);
-        final View view = mInflater.inflate(layoutResId, mEditorContainerView,
+        final View view = mInflater.inflate(dataKind.editorLayoutResourceId, mEditorContainerView,
                 false);
 
         if (view instanceof Editor) {
@@ -742,11 +730,6 @@ public class ConfirmAddDetailActivity extends Activity implements
         TextView extraTextView = (TextView) findViewById(R.id.extra_info);
         extraTextView.setVisibility(View.VISIBLE);
         extraTextView.setText(value);
-    }
-
-    private void setDefaultContactImage(String displayName, String lookupKey) {
-        mPhotoView.setImageDrawable(ContactPhotoManager.getDefaultAvatarDrawableForContact(
-                getResources(), false, new DefaultImageRequest(displayName, lookupKey)));
     }
 
     /**

@@ -85,24 +85,16 @@ public class FastScrollingIndexCache {
      */
     private final Map<String, String> mCache = Maps.newHashMap();
 
-    private static FastScrollingIndexCache sSingleton;
+    public FastScrollingIndexCache(Context context) {
+        this(PreferenceManager.getDefaultSharedPreferences(context));
 
-    public static FastScrollingIndexCache getInstance(Context context) {
-        if (sSingleton == null) {
-            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-            sSingleton = new FastScrollingIndexCache(prefs);
-        }
-        return sSingleton;
+        // At this point, the SharedPreferences might just have been generated and may still be
+        // loading from the file, in which case loading from the preferences would be blocked.
+        // To avoid that, we load lazily.
     }
 
     @VisibleForTesting
-    static synchronized FastScrollingIndexCache getInstanceForTest(
-            SharedPreferences prefs) {
-        sSingleton = new FastScrollingIndexCache(prefs);
-        return sSingleton;
-    }
-
-    private FastScrollingIndexCache(SharedPreferences prefs) {
+    FastScrollingIndexCache(SharedPreferences prefs) {
         mPrefs = prefs;
     }
 
@@ -246,7 +238,7 @@ public class FastScrollingIndexCache {
 
     public void invalidate() {
         synchronized (mCache) {
-            mPrefs.edit().remove(PREFERENCE_KEY).commit();
+            mPrefs.edit().remove(PREFERENCE_KEY).apply();
             mCache.clear();
             mPreferenceLoaded = true;
 

@@ -141,6 +141,7 @@ import com.android.mms.ui.RecipientsEditor.RecipientContextMenuInfo;
 import com.android.mms.util.DraftCache;
 import com.android.mms.util.PhoneNumberFormatter;
 import com.android.mms.util.SendingProgressTokenManager;
+import com.android.mms.util.SmileyParser;
 import com.android.mms.widget.MmsWidgetProvider;
 import com.google.android.mms.ContentType;
 import com.google.android.mms.MmsException;
@@ -208,6 +209,7 @@ public class ComposeMessageActivity extends Activity
     private static final int MENU_SEND_EMAIL            = 23;
     private static final int MENU_COPY_MESSAGE_TEXT     = 24;
     private static final int MENU_COPY_TO_SDCARD        = 25;
+    private static final int MENU_INSERT_SMILEY         = 26;
     private static final int MENU_ADD_ADDRESS_TO_CONTACTS = 27;
     private static final int MENU_LOCK_MESSAGE          = 28;
     private static final int MENU_UNLOCK_MESSAGE        = 29;
@@ -225,9 +227,6 @@ public class ComposeMessageActivity extends Activity
     private static final int CHARS_REMAINING_BEFORE_COUNTER_SHOWN = 10;
 
     private static final long NO_DATE_FOR_DIALOG = -1L;
-
-    private static final String KEY_EXIT_ON_SENT = "exit_on_sent";
-    private static final String KEY_FORWARDED_MESSAGE = "forwarded_message";
 
     private static final String EXIT_ECM_RESULT = "exit_ecm_result";
 
@@ -257,10 +256,8 @@ public class ComposeMessageActivity extends Activity
 
     private Conversation mConversation;     // Conversation we are working in
 
-    // When mSendDiscreetMode is true, this activity only allows a user to type in and send
-    // a single sms, send the message, and then exits. The message history and menus are hidden.
-    private boolean mSendDiscreetMode;
-    private boolean mForwardMessageMode;
+    private boolean mExitOnSent;            // Should we finish() after sending a message?
+                                            // TODO: mExitOnSent is obsolete -- remove
 
     private View mTopPanel;                 // View containing the recipient and subject editors
     private View mBottomPanel;              // View containing the text editor, send button, ec.
@@ -295,6 +292,8 @@ public class ComposeMessageActivity extends Activity
                                         // help clarify the situation.
 
     private WorkingMessage mWorkingMessage;         // The message currently being composed.
+
+    private AlertDialog mSmileyDialog;
 
     private boolean mWaitingForSubActivity;
     private int mLastRecipientCount;            // Used for warning the user on too many recipients.
@@ -333,10 +332,6 @@ public class ComposeMessageActivity extends Activity
     // state of mWorkingMessage. Also, if we are handling a Send or Forward Message Intent,
     // we should not load the draft.
     private boolean mShouldLoadDraft;
-
-    // Whether or not we are currently enabled for SMS. This field is updated in onStart to make
-    // sure we notice if the user has changed the default SMS app.
-    private boolean mIsSmsEnabled;
 
     private Handler mHandler = new Handler();
 
@@ -1078,8 +1073,7 @@ public class ComposeMessageActivity extends Activity
             addCallAndContactMenuItems(menu, l, msgItem);
 
             // Forward is not available for undownloaded messages.
-            if (msgItem.isDownloaded() && (msgItem.isSms() || isForwardable(msgId))
-                    && mIsSmsEnabled) {
+            if (msgItem.isDownloaded() && (msgItem.isSms() || isForwardable(msgId))) {
                 menu.add(0, MENU_FORWARD_MESSAGE, 0, R.string.menu_forward)
                         .setOnMenuItemClickListener(l);
             }
@@ -1125,10 +1119,10 @@ public class ComposeMessageActivity extends Activity
                 }
             }
 
-            if (msgItem.mLocked && mIsSmsEnabled) {
+            if (msgItem.mLocked) {
                 menu.add(0, MENU_UNLOCK_MESSAGE, 0, R.string.menu_unlock)
                     .setOnMenuItemClickListener(l);
-            } else if (mIsSmsEnabled) {
+            } else {
                 menu.add(0, MENU_LOCK_MESSAGE, 0, R.string.menu_lock)
                     .setOnMenuItemClickListener(l);
             }
@@ -1141,10 +1135,8 @@ public class ComposeMessageActivity extends Activity
                         .setOnMenuItemClickListener(l);
             }
 
-            if (mIsSmsEnabled) {
-                menu.add(0, MENU_DELETE_MESSAGE, 0, R.string.delete_message)
-                    .setOnMenuItemClickListener(l);
-            }
+            menu.add(0, MENU_DELETE_MESSAGE, 0, R.string.delete_message)
+                .setOnMenuItemClickListener(l);
         }
     };
 
@@ -1258,8 +1250,8 @@ public class ComposeMessageActivity extends Activity
                 // on the UI thread.
                 Intent intent = createIntent(ComposeMessageActivity.this, 0);
 
-                intent.putExtra(KEY_EXIT_ON_SENT, true);
-                intent.putExtra(KEY_FORWARDED_MESSAGE, true);
+                intent.putExtra("exit_on_sent", true);
+                intent.putExtra("forwarded_message", true);
                 if (mTempThreadId > 0) {
                     intent.putExtra(THREAD_ID, mTempThreadId);
                 }
@@ -1619,9 +1611,6 @@ public class ComposeMessageActivity extends Activity
                 if (isDrm) {
                     extension += DrmUtils.getConvertExtension(type);
                 }
-                // Remove leading periods. The gallery ignores files starting with a period.
-                fileName = fileName.replaceAll("^.", "");
-
                 File file = getUniqueDestination(dir + fileName, extension);
 
                 // make sure the path is valid and directories created for this file.
@@ -1863,7 +1852,6 @@ public class ComposeMessageActivity extends Activity
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        mIsSmsEnabled = MmsConfig.isSmsEnabled(this);
         super.onCreate(savedInstanceState);
 
         resetConfiguration(getResources().getConfiguration());
@@ -1979,7 +1967,7 @@ public class ComposeMessageActivity extends Activity
             drawBottomPanel();
         }
 
-        onKeyboardStateChanged();
+        onKeyboardStateChanged(mIsKeyboardOpen);
 
         if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
             log("update title, mConversation=" + mConversation.toString());
@@ -2102,7 +2090,7 @@ public class ComposeMessageActivity extends Activity
                 mWorkingMessage.unDiscard();    // it was discarded in onStop().
 
                 sanityCheckConversation();
-            } else if (isRecipientsEditorVisible() && recipientCount() > 0) {
+            } else if (isRecipientsEditorVisible()) {
                 if (LogTag.VERBOSE) {
                     log("onRestart: goToConversationList");
                 }
@@ -2114,11 +2102,6 @@ public class ComposeMessageActivity extends Activity
     @Override
     protected void onStart() {
         super.onStart();
-        boolean isSmsEnabled = MmsConfig.isSmsEnabled(this);
-        if (isSmsEnabled != mIsSmsEnabled) {
-            mIsSmsEnabled = isSmsEnabled;
-            invalidateOptionsMenu();
-        }
 
         initFocus();
 
@@ -2192,7 +2175,7 @@ public class ComposeMessageActivity extends Activity
      * @param debugFlag shows where this is being called from
      */
     private void loadMessagesAndDraft(int debugFlag) {
-        if (!mSendDiscreetMode && !mMessagesAndDraftLoaded) {
+        if (!mMessagesAndDraftLoaded) {
             if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
                 Log.v(TAG, "### CMA.loadMessagesAndDraft: flag=" + debugFlag);
             }
@@ -2234,11 +2217,8 @@ public class ComposeMessageActivity extends Activity
 
         mWorkingMessage.writeStateToBundle(outState);
 
-        if (mSendDiscreetMode) {
-            outState.putBoolean(KEY_EXIT_ON_SENT, mSendDiscreetMode);
-        }
-        if (mForwardMessageMode) {
-            outState.putBoolean(KEY_FORWARDED_MESSAGE, mForwardMessageMode);
+        if (mExitOnSent) {
+            outState.putBoolean("exit_on_sent", mExitOnSent);
         }
     }
 
@@ -2370,7 +2350,7 @@ public class ComposeMessageActivity extends Activity
             Log.v(TAG, "CMA.onConfigurationChanged: " + newConfig +
                     ", mIsKeyboardOpen=" + mIsKeyboardOpen);
         }
-        onKeyboardStateChanged();
+        onKeyboardStateChanged(mIsKeyboardOpen);
     }
 
     // returns true if landscape/portrait configuration has changed
@@ -2384,20 +2364,10 @@ public class ComposeMessageActivity extends Activity
         return false;
     }
 
-    private void onKeyboardStateChanged() {
+    private void onKeyboardStateChanged(boolean isKeyboardOpen) {
         // If the keyboard is hidden, don't show focus highlights for
         // things that cannot receive input.
-        mTextEditor.setEnabled(mIsSmsEnabled);
-        if (!mIsSmsEnabled) {
-            if (mRecipientsEditor != null) {
-                mRecipientsEditor.setFocusableInTouchMode(false);
-            }
-            if (mSubjectTextEditor != null) {
-                mSubjectTextEditor.setFocusableInTouchMode(false);
-            }
-            mTextEditor.setFocusableInTouchMode(false);
-            mTextEditor.setHint(R.string.sending_disabled_not_default_app);
-        } else if (mIsKeyboardOpen) {
+        if (isKeyboardOpen) {
             if (mRecipientsEditor != null) {
                 mRecipientsEditor.setFocusableInTouchMode(true);
             }
@@ -2640,12 +2610,6 @@ public class ComposeMessageActivity extends Activity
 
         menu.clear();
 
-        if (mSendDiscreetMode && !mForwardMessageMode) {
-            // When we're in send-a-single-message mode from the lock screen, don't show
-            // any menus.
-            return true;
-        }
-
         if (isRecipientCallable()) {
             MenuItem item = menu.add(0, MENU_CALL_RECIPIENT, 0, R.string.menu_call)
                 .setIcon(R.drawable.ic_menu_call)
@@ -2656,7 +2620,7 @@ public class ComposeMessageActivity extends Activity
             }
         }
 
-        if (MmsConfig.getMmsEnabled() && mIsSmsEnabled) {
+        if (MmsConfig.getMmsEnabled()) {
             if (!isSubjectEditorVisible()) {
                 menu.add(0, MENU_ADD_SUBJECT, 0, R.string.add_subject).setIcon(
                         R.drawable.ic_menu_edit);
@@ -2669,15 +2633,20 @@ public class ComposeMessageActivity extends Activity
             }
         }
 
-        if (isPreparedForSending() && mIsSmsEnabled) {
+        if (isPreparedForSending()) {
             menu.add(0, MENU_SEND, 0, R.string.send).setIcon(android.R.drawable.ic_menu_send);
+        }
+
+        if (!mWorkingMessage.hasSlideshow()) {
+            menu.add(0, MENU_INSERT_SMILEY, 0, R.string.menu_insert_smiley).setIcon(
+                    R.drawable.ic_menu_emoticons);
         }
 
         if (getRecipients().size() > 1) {
             menu.add(0, MENU_GROUP_PARTICIPANTS, 0, R.string.menu_group_participants);
         }
 
-        if (mMsgListAdapter.getCount() > 0 && mIsSmsEnabled) {
+        if (mMsgListAdapter.getCount() > 0) {
             // Removed search as part of b/1205708
             //menu.add(0, MENU_SEARCH, 0, R.string.menu_search).setIcon(
             //        R.drawable.ic_menu_search);
@@ -2686,7 +2655,7 @@ public class ComposeMessageActivity extends Activity
                 menu.add(0, MENU_DELETE_THREAD, 0, R.string.delete_thread).setIcon(
                     android.R.drawable.ic_menu_delete);
             }
-        } else if (mIsSmsEnabled) {
+        } else {
             menu.add(0, MENU_DISCARD, 0, R.string.discard).setIcon(android.R.drawable.ic_menu_delete);
         }
 
@@ -2762,6 +2731,9 @@ public class ComposeMessageActivity extends Activity
                 break;
             case MENU_CALL_RECIPIENT:
                 dialRecipient();
+                break;
+            case MENU_INSERT_SMILEY:
+                showSmileyDialog();
                 break;
             case MENU_GROUP_PARTICIPANTS:
             {
@@ -3222,7 +3194,7 @@ public class ComposeMessageActivity extends Activity
 
         // If this is a forwarded message, it will have an Intent extra
         // indicating so.  If not, bail out.
-        if (!mForwardMessageMode) {
+        if (intent.getBooleanExtra("forwarded_message", false) == false) {
             return false;
         }
 
@@ -3350,7 +3322,7 @@ public class ComposeMessageActivity extends Activity
         CharSequence text = mWorkingMessage.getText();
 
         // TextView.setTextKeepState() doesn't like null input.
-        if (text != null && mIsSmsEnabled) {
+        if (text != null) {
             mTextEditor.setTextKeepState(text);
 
             // Set the edit caret to the end of the text.
@@ -3358,7 +3330,6 @@ public class ComposeMessageActivity extends Activity
         } else {
             mTextEditor.setText("");
         }
-        onKeyboardStateChanged();
     }
 
     private void hideBottomPanel() {
@@ -3374,7 +3345,6 @@ public class ComposeMessageActivity extends Activity
         showSubjectEditor(showSubjectEditor || mWorkingMessage.hasSubject());
 
         invalidateOptionsMenu();
-        onKeyboardStateChanged();
     }
 
     //==========================================================
@@ -3573,9 +3543,6 @@ public class ComposeMessageActivity extends Activity
     }
 
     private void startMsgListQuery(int token) {
-        if (mSendDiscreetMode) {
-            return;
-        }
         Uri conversationUri = mConversation.getUri();
 
         if (conversationUri == null) {
@@ -3620,7 +3587,7 @@ public class ComposeMessageActivity extends Activity
         mMsgListAdapter.setMsgListItemHandler(mMessageListItemHandler);
         mMsgListView.setAdapter(mMsgListAdapter);
         mMsgListView.setItemsCanFocus(false);
-        mMsgListView.setVisibility(mSendDiscreetMode ? View.INVISIBLE : View.VISIBLE);
+        mMsgListView.setVisibility(View.VISIBLE);
         mMsgListView.setOnCreateContextMenuListener(mMsgListMenuCreateListener);
         mMsgListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -3697,10 +3664,9 @@ public class ComposeMessageActivity extends Activity
     private boolean isPreparedForSending() {
         int recipientCount = recipientCount();
 
-        return recipientCount > 0 &&
-                recipientCount <= MmsConfig.getRecipientLimit() &&
-                mIsSmsEnabled &&
-                (mWorkingMessage.hasAttachment() || mWorkingMessage.hasText() ||
+        return recipientCount > 0 && recipientCount <= MmsConfig.getRecipientLimit() &&
+            (mWorkingMessage.hasAttachment() ||
+                    mWorkingMessage.hasText() ||
                     mWorkingMessage.hasSubject());
     }
 
@@ -3765,7 +3731,7 @@ public class ComposeMessageActivity extends Activity
             mScrollOnSend = true;   // in the next onQueryComplete, scroll the list to the end.
         }
         // But bail out if we are supposed to exit after the message is sent.
-        if (mSendDiscreetMode) {
+        if (mExitOnSent) {
             finish();
         }
     }
@@ -3872,12 +3838,7 @@ public class ComposeMessageActivity extends Activity
                     ContactList.getByNumbers(recipients,
                             false /* don't block */, true /* replace number */), false);
             addRecipientsListeners();
-            mSendDiscreetMode = bundle.getBoolean(KEY_EXIT_ON_SENT, false);
-            mForwardMessageMode = bundle.getBoolean(KEY_FORWARDED_MESSAGE, false);
-
-            if (mSendDiscreetMode) {
-                mMsgListView.setVisibility(View.INVISIBLE);
-            }
+            mExitOnSent = bundle.getBoolean("exit_on_sent", false);
             mWorkingMessage.readStateFromBundle(bundle);
 
             return;
@@ -3911,11 +3872,7 @@ public class ComposeMessageActivity extends Activity
         addRecipientsListeners();
         updateThreadIdIfRunning();
 
-        mSendDiscreetMode = intent.getBooleanExtra(KEY_EXIT_ON_SENT, false);
-        mForwardMessageMode = intent.getBooleanExtra(KEY_FORWARDED_MESSAGE, false);
-        if (mSendDiscreetMode) {
-            mMsgListView.setVisibility(View.INVISIBLE);
-        }
+        mExitOnSent = intent.getBooleanExtra("exit_on_sent", false);
         if (intent.hasExtra("sms_body")) {
             mWorkingMessage.setText(intent.getStringExtra("sms_body"));
         }
@@ -3964,34 +3921,31 @@ public class ComposeMessageActivity extends Activity
      * @param listSizeChange the amount the message list view size has vertically changed
      */
     private void smoothScrollToEnd(boolean force, int listSizeChange) {
-        int lastItemVisible = mMsgListView.getLastVisiblePosition();
-        int lastItemInList = mMsgListAdapter.getCount() - 1;
-        if (lastItemVisible < 0 || lastItemInList < 0) {
+        int last = mMsgListView.getLastVisiblePosition();
+        int newPosition = mMsgListAdapter.getCount() - 1;
+        if (last < 0 || newPosition < 0) {
             if (LogTag.VERBOSE || Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-                Log.v(TAG, "smoothScrollToEnd: lastItemVisible=" + lastItemVisible +
-                        ", lastItemInList=" + lastItemInList +
+                Log.v(TAG, "smoothScrollToEnd: last=" + last + ", newPos=" + newPosition +
                         ", mMsgListView not ready");
             }
             return;
         }
 
-        View lastChildVisible =
-                mMsgListView.getChildAt(lastItemVisible - mMsgListView.getFirstVisiblePosition());
-        int lastVisibleItemBottom = 0;
-        int lastVisibleItemHeight = 0;
-        if (lastChildVisible != null) {
-            lastVisibleItemBottom = lastChildVisible.getBottom();
-            lastVisibleItemHeight = lastChildVisible.getHeight();
+        View lastChild = mMsgListView.getChildAt(last - mMsgListView.getFirstVisiblePosition());
+        int bottom = 0;
+        int height = 0;
+        if (lastChild != null) {
+            bottom = lastChild.getBottom();
+            height = lastChild.getHeight();
         }
 
         if (LogTag.VERBOSE || Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-            Log.v(TAG, "smoothScrollToEnd newPosition: " + lastItemInList +
+            Log.v(TAG, "smoothScrollToEnd newPosition: " + newPosition +
                     " mLastSmoothScrollPosition: " + mLastSmoothScrollPosition +
                     " first: " + mMsgListView.getFirstVisiblePosition() +
-                    " lastItemVisible: " + lastItemVisible +
-                    " lastVisibleItemBottom: " + lastVisibleItemBottom +
-                    " lastVisibleItemBottom + listSizeChange: " +
-                    (lastVisibleItemBottom + listSizeChange) +
+                    " last: " + last +
+                    " bottom: " + bottom +
+                    " bottom + listSizeChange: " + (bottom + listSizeChange) +
                     " mMsgListView.getHeight() - mMsgListView.getPaddingBottom(): " +
                     (mMsgListView.getHeight() - mMsgListView.getPaddingBottom()) +
                     " listSizeChange: " + listSizeChange);
@@ -4010,50 +3964,45 @@ public class ComposeMessageActivity extends Activity
         // attachment thumbnail, such as picture. In this situation, we want to scroll the list so
         // the bottom of the thumbnail is visible and the top of the item is scroll off the screen.
         int listHeight = mMsgListView.getHeight();
-        boolean lastItemTooTall = lastVisibleItemHeight > listHeight;
-        boolean willScroll = force ||
-                ((listSizeChange != 0 || lastItemInList != mLastSmoothScrollPosition) &&
-                lastVisibleItemBottom + listSizeChange <=
-                    listHeight - mMsgListView.getPaddingBottom());
-        if (willScroll || (lastItemTooTall && lastItemInList == lastItemVisible)) {
+        if (force || ((listSizeChange != 0 || newPosition != mLastSmoothScrollPosition) &&
+                bottom + listSizeChange <=
+                        listHeight - mMsgListView.getPaddingBottom()) ||
+                        height > listHeight) {
             if (Math.abs(listSizeChange) > SMOOTH_SCROLL_THRESHOLD) {
                 // When the keyboard comes up, the window manager initiates a cross fade
                 // animation that conflicts with smooth scroll. Handle that case by jumping the
                 // list directly to the end.
                 if (LogTag.VERBOSE || Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-                    Log.v(TAG, "keyboard state changed. setSelection=" + lastItemInList);
+                    Log.v(TAG, "keyboard state changed. setSelection=" + newPosition);
                 }
-                if (lastItemTooTall) {
+                if (height > listHeight) {
                     // If the height of the last item is taller than the whole height of the list,
                     // we need to scroll that item so that its top is negative or above the top of
                     // the list. That way, the bottom of the last item will be exposed above the
                     // keyboard.
-                    mMsgListView.setSelectionFromTop(lastItemInList,
-                            listHeight - lastVisibleItemHeight);
+                    mMsgListView.setSelectionFromTop(newPosition, listHeight - height);
                 } else {
-                    mMsgListView.setSelection(lastItemInList);
+                    mMsgListView.setSelection(newPosition);
                 }
-            } else if (lastItemInList - lastItemVisible > MAX_ITEMS_TO_INVOKE_SCROLL_SHORTCUT) {
+            } else if (newPosition - last > MAX_ITEMS_TO_INVOKE_SCROLL_SHORTCUT) {
                 if (LogTag.VERBOSE || Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-                    Log.v(TAG, "too many to scroll, setSelection=" + lastItemInList);
+                    Log.v(TAG, "too many to scroll, setSelection=" + newPosition);
                 }
-                mMsgListView.setSelection(lastItemInList);
+                mMsgListView.setSelection(newPosition);
             } else {
                 if (LogTag.VERBOSE || Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-                    Log.v(TAG, "smooth scroll to " + lastItemInList);
+                    Log.v(TAG, "smooth scroll to " + newPosition);
                 }
-                if (lastItemTooTall) {
+                if (height > listHeight) {
                     // If the height of the last item is taller than the whole height of the list,
                     // we need to scroll that item so that its top is negative or above the top of
                     // the list. That way, the bottom of the last item will be exposed above the
-                    // keyboard. We should use smoothScrollToPositionFromTop here, but it doesn't
-                    // seem to work -- the list ends up scrolling to a random position.
-                    mMsgListView.setSelectionFromTop(lastItemInList,
-                            listHeight - lastVisibleItemHeight);
+                    // keyboard.
+                    mMsgListView.setSelectionFromTop(newPosition, listHeight - height);
                 } else {
-                    mMsgListView.smoothScrollToPosition(lastItemInList);
+                    mMsgListView.smoothScrollToPosition(newPosition);
                 }
-                mLastSmoothScrollPosition = lastItemInList;
+                mLastSmoothScrollPosition = newPosition;
             }
         }
     }
@@ -4092,14 +4041,12 @@ public class ComposeMessageActivity extends Activity
                     int newSelectionPos = -1;
                     long targetMsgId = getIntent().getLongExtra("select_id", -1);
                     if (targetMsgId != -1) {
-                        if (cursor != null) {
-                            cursor.moveToPosition(-1);
-                            while (cursor.moveToNext()) {
-                                long msgId = cursor.getLong(COLUMN_ID);
-                                if (msgId == targetMsgId) {
-                                    newSelectionPos = cursor.getPosition();
-                                    break;
-                                }
+                        cursor.moveToPosition(-1);
+                        while (cursor.moveToNext()) {
+                            long msgId = cursor.getLong(COLUMN_ID);
+                            if (msgId == targetMsgId) {
+                                newSelectionPos = cursor.getPosition();
+                                break;
                             }
                         }
                     } else if (mSavedScrollPosition != -1) {
@@ -4131,7 +4078,7 @@ public class ComposeMessageActivity extends Activity
                     } else {
                         int count = mMsgListAdapter.getCount();
                         long lastMsgId = 0;
-                        if (cursor != null && count > 0) {
+                        if (count > 0) {
                             cursor.moveToLast();
                             lastMsgId = cursor.getLong(COLUMN_ID);
                         }
@@ -4155,8 +4102,7 @@ public class ComposeMessageActivity extends Activity
                     // mSentMessage is true).
                     // Show the recipients editor to give the user a chance to add
                     // more people before the conversation begins.
-                    if (cursor != null && cursor.getCount() == 0
-                            && !isRecipientsEditorVisible() && !mSentMessage) {
+                    if (cursor.getCount() == 0 && !isRecipientsEditorVisible() && !mSentMessage) {
                         initRecipientsEditor();
                     }
 
@@ -4264,6 +4210,85 @@ public class ComposeMessageActivity extends Activity
 
             MmsWidgetProvider.notifyDatasetChanged(getApplicationContext());
         }
+    }
+
+    private void showSmileyDialog() {
+        if (mSmileyDialog == null) {
+            int[] icons = SmileyParser.DEFAULT_SMILEY_RES_IDS;
+            String[] names = getResources().getStringArray(
+                    SmileyParser.DEFAULT_SMILEY_NAMES);
+            final String[] texts = getResources().getStringArray(
+                    SmileyParser.DEFAULT_SMILEY_TEXTS);
+
+            final int N = names.length;
+
+            List<Map<String, ?>> entries = new ArrayList<Map<String, ?>>();
+            for (int i = 0; i < N; i++) {
+                // We might have different ASCII for the same icon, skip it if
+                // the icon is already added.
+                boolean added = false;
+                for (int j = 0; j < i; j++) {
+                    if (icons[i] == icons[j]) {
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added) {
+                    HashMap<String, Object> entry = new HashMap<String, Object>();
+
+                    entry. put("icon", icons[i]);
+                    entry. put("name", names[i]);
+                    entry.put("text", texts[i]);
+
+                    entries.add(entry);
+                }
+            }
+
+            final SimpleAdapter a = new SimpleAdapter(
+                    this,
+                    entries,
+                    R.layout.smiley_menu_item,
+                    new String[] {"icon", "name", "text"},
+                    new int[] {R.id.smiley_icon, R.id.smiley_name, R.id.smiley_text});
+            SimpleAdapter.ViewBinder viewBinder = new SimpleAdapter.ViewBinder() {
+                @Override
+                public boolean setViewValue(View view, Object data, String textRepresentation) {
+                    if (view instanceof ImageView) {
+                        Drawable img = getResources().getDrawable((Integer)data);
+                        ((ImageView)view).setImageDrawable(img);
+                        return true;
+                    }
+                    return false;
+                }
+            };
+            a.setViewBinder(viewBinder);
+
+            AlertDialog.Builder b = new AlertDialog.Builder(this);
+
+            b.setTitle(getString(R.string.menu_insert_smiley));
+
+            b.setCancelable(true);
+            b.setAdapter(a, new DialogInterface.OnClickListener() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public final void onClick(DialogInterface dialog, int which) {
+                    HashMap<String, Object> item = (HashMap<String, Object>) a.getItem(which);
+
+                    String smiley = (String)item.get("text");
+                    if (mSubjectTextEditor != null && mSubjectTextEditor.hasFocus()) {
+                        mSubjectTextEditor.append(smiley);
+                    } else {
+                        mTextEditor.append(smiley);
+                    }
+
+                    dialog.dismiss();
+                }
+            });
+
+            mSmileyDialog = b.create();
+        }
+
+        mSmileyDialog.show();
     }
 
     @Override

@@ -37,13 +37,9 @@ import android.provider.ContactsContract.CommonDataKinds.SipAddress;
 import android.provider.ContactsContract.CommonDataKinds.StructuredPostal;
 import android.provider.ContactsContract.CommonDataKinds.Website;
 import android.provider.ContactsContract.Contacts;
-import android.provider.ContactsContract.DisplayNameSources;
-import android.provider.ContactsContract.Intents.Insert;
-import android.provider.ContactsContract.Directory;
 import android.provider.ContactsContract.QuickContact;
 import android.provider.ContactsContract.RawContacts;
 import android.support.v13.app.FragmentPagerAdapter;
-import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.support.v4.view.ViewPager.SimpleOnPageChangeListener;
 import android.text.TextUtils;
@@ -54,29 +50,26 @@ import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.android.contacts.ContactSaveService;
-import com.android.contacts.common.Collapser;
+import com.android.contacts.Collapser;
 import com.android.contacts.R;
-import com.android.contacts.common.model.AccountTypeManager;
-import com.android.contacts.common.model.Contact;
-import com.android.contacts.common.model.ContactLoader;
-import com.android.contacts.common.model.RawContact;
-import com.android.contacts.common.model.account.AccountType;
-import com.android.contacts.common.model.dataitem.DataItem;
-import com.android.contacts.common.model.dataitem.DataKind;
-import com.android.contacts.common.model.dataitem.EmailDataItem;
-import com.android.contacts.common.model.dataitem.ImDataItem;
-import com.android.contacts.common.util.Constants;
-import com.android.contacts.common.util.DataStatus;
-import com.android.contacts.common.util.UriUtils;
+import com.android.contacts.model.Contact;
+import com.android.contacts.model.ContactLoader;
+import com.android.contacts.model.RawContact;
+import com.android.contacts.model.dataitem.DataItem;
+import com.android.contacts.model.dataitem.DataKind;
+import com.android.contacts.model.dataitem.EmailDataItem;
+import com.android.contacts.model.dataitem.ImDataItem;
+import com.android.contacts.util.Constants;
+import com.android.contacts.util.DataStatus;
 import com.android.contacts.util.ImageViewDrawableSetter;
 import com.android.contacts.util.SchedulingUtils;
-import com.android.contacts.common.util.StopWatch;
+import com.android.contacts.util.StopWatch;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
@@ -116,13 +109,10 @@ public class QuickContactActivity extends Activity {
     private View mSelectedTabRectangle;
     private View mLineAfterTrack;
 
-    private ImageView mPhotoView;
-    private ImageView mOpenDetailsOrAddContactImage;
-    private ImageView mStarImage;
+    private ImageButton mOpenDetailsButton;
+    private ImageButton mOpenDetailsPushLayerButton;
     private ViewPager mListPager;
-    private ViewPagerAdapter mPagerAdapter;
 
-    private Contact mContactData;
     private ContactLoader mContactLoader;
 
     private final ImageViewDrawableSetter mPhotoSetter = new ImageViewDrawableSetter();
@@ -162,37 +152,6 @@ public class QuickContactActivity extends Activity {
 
     private StopWatch mStopWatch = ENABLE_STOPWATCH
             ? StopWatch.start("QuickContact") : StopWatch.getNullStopWatch();
-
-    final OnClickListener mOpenDetailsClickHandler = new OnClickListener() {
-        @Override
-        public void onClick(View v) {
-            final Intent intent = new Intent(Intent.ACTION_VIEW, mLookupUri);
-            mContactLoader.cacheResult();
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
-            startActivity(intent);
-            close(false);
-        }
-    };
-
-    final OnClickListener mAddToContactsClickHandler = new OnClickListener() {
-        @Override
-        public void onClick(View v) {
-            if (mContactData == null) {
-                Log.e(TAG, "Empty contact data when trying to add to contact");
-                return;
-            }
-            final Intent intent = new Intent(Intent.ACTION_INSERT_OR_EDIT);
-            intent.setType(Contacts.CONTENT_ITEM_TYPE);
-
-            // Only pre-fill the name field if the provided display name is an organization
-            // name or better (e.g. structured name, nickname)
-            if (mContactData.getDisplayNameSource() >= DisplayNameSources.ORGANIZATION) {
-                intent.putExtra(Insert.NAME, mContactData.getDisplayName());
-            }
-            intent.putExtra(Insert.DATA, mContactData.getContentValues());
-            startActivity(intent);
-        }
-    };
 
     @Override
     protected void onCreate(Bundle icicle) {
@@ -237,8 +196,8 @@ public class QuickContactActivity extends Activity {
         mFloatingLayout = (FloatingChildLayout) findViewById(R.id.floating_layout);
         mTrack = (ViewGroup) findViewById(R.id.track);
         mTrackScroller = (HorizontalScrollView) findViewById(R.id.track_scroller);
-        mOpenDetailsOrAddContactImage = (ImageView) findViewById(R.id.contact_details_image);
-        mStarImage = (ImageView) findViewById(R.id.quickcontact_star_button);
+        mOpenDetailsButton = (ImageButton) findViewById(R.id.open_details_button);
+        mOpenDetailsPushLayerButton = (ImageButton) findViewById(R.id.open_details_push_layer);
         mListPager = (ViewPager) findViewById(R.id.item_list_pager);
         mSelectedTabRectangle = findViewById(R.id.selected_tab_rectangle);
         mLineAfterTrack = findViewById(R.id.line_after_track);
@@ -251,10 +210,19 @@ public class QuickContactActivity extends Activity {
             }
         });
 
-        mOpenDetailsOrAddContactImage.setOnClickListener(mOpenDetailsClickHandler);
-
-        mPagerAdapter = new ViewPagerAdapter(getFragmentManager());
-        mListPager.setAdapter(mPagerAdapter);
+        final OnClickListener openDetailsClickHandler = new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final Intent intent = new Intent(Intent.ACTION_VIEW, mLookupUri);
+                mContactLoader.cacheResult();
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
+                startActivity(intent);
+                close(false);
+            }
+        };
+        mOpenDetailsButton.setOnClickListener(openDetailsClickHandler);
+        mOpenDetailsPushLayerButton.setOnClickListener(openDetailsClickHandler);
+        mListPager.setAdapter(new ViewPagerAdapter(getFragmentManager()));
         mListPager.setOnPageChangeListener(new PageChangeListener());
 
         final Rect sourceBounds = intent.getSourceBounds();
@@ -264,11 +232,7 @@ public class QuickContactActivity extends Activity {
 
         // find and prepare correct header view
         mPhotoContainer = findViewById(R.id.photo_container);
-
         setHeaderNameText(R.id.name, R.string.missing_name);
-
-        mPhotoView = (ImageView) mPhotoContainer.findViewById(R.id.photo);
-        mPhotoView.setOnClickListener(mOpenDetailsClickHandler);
 
         mStopWatch.lap("v"); // view initialized
 
@@ -312,7 +276,6 @@ public class QuickContactActivity extends Activity {
                                 @Override
                                 public void run() {
                                     finish();
-                                    overridePendingTransition(0, 0);
                                 }
                             }, POST_DRAW_WAIT_DURATION);
                         }
@@ -367,75 +330,24 @@ public class QuickContactActivity extends Activity {
      * Handle the result from the ContactLoader
      */
     private void bindData(Contact data) {
-        mContactData = data;
         final ResolveCache cache = ResolveCache.getInstance(this);
         final Context context = this;
 
-        mOpenDetailsOrAddContactImage.setVisibility(isMimeExcluded(Contacts.CONTENT_ITEM_TYPE) ?
-                View.GONE : View.VISIBLE);
-        final boolean isStarred = data.getStarred();
-        if (isStarred) {
-            mStarImage.setImageResource(R.drawable.ic_favorite_on_lt);
-            mStarImage.setContentDescription(
-                getResources().getString(R.string.menu_removeStar));
-        } else {
-            mStarImage.setImageResource(R.drawable.ic_favorite_off_lt);
-            mStarImage.setContentDescription(
-                getResources().getString(R.string.menu_addStar));
-        }
-        final Uri lookupUri = data.getLookupUri();
-
-        // If this is a json encoded URI, there is no local contact to star
-        if (UriUtils.isEncodedContactUri(lookupUri)) {
-            mStarImage.setVisibility(View.GONE);
-
-            // If directory export support is not allowed, then don't allow the user to add
-            // to contacts
-            if (mContactData.getDirectoryExportSupport() == Directory.EXPORT_SUPPORT_NONE) {
-                configureHeaderClickActions(false);
-            } else {
-                configureHeaderClickActions(true);
-            }
-        } else {
-            configureHeaderClickActions(false);
-            mStarImage.setVisibility(View.VISIBLE);
-            mStarImage.setOnClickListener(new OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    // Toggle "starred" state
-                    // Make sure there is a contact
-                    if (lookupUri != null) {
-                        // Changes the state of the image already before sending updates to the
-                        // database
-                        if (isStarred) {
-                            mStarImage.setImageResource(R.drawable.ic_favorite_off_lt);
-                        } else {
-                            mStarImage.setImageResource(R.drawable.ic_favorite_on_lt);
-                        }
-
-                        // Now perform the real save
-                        final Intent intent = ContactSaveService.createSetStarredIntent(context,
-                                lookupUri, !isStarred);
-                        context.startService(intent);
-                    }
-                }
-            });
-        }
+        mOpenDetailsButton.setVisibility(isMimeExcluded(Contacts.CONTENT_ITEM_TYPE) ? View.GONE
+                : View.VISIBLE);
 
         mDefaultsMap.clear();
 
         mStopWatch.lap("sph"); // Start photo setting
 
-        mPhotoSetter.setupContactPhoto(data, mPhotoView);
+        final ImageView photoView = (ImageView) mPhotoContainer.findViewById(R.id.photo);
+        mPhotoSetter.setupContactPhoto(data, photoView);
 
         mStopWatch.lap("ph"); // Photo set
 
         for (RawContact rawContact : data.getRawContacts()) {
             for (DataItem dataItem : rawContact.getDataItems()) {
                 final String mimeType = dataItem.getMimeType();
-                final AccountType accountType = rawContact.getAccountType(this);
-                final DataKind dataKind = AccountTypeManager.getInstance(this)
-                        .getKindOrFallback(accountType, mimeType);
 
                 // Skip this data item if MIME-type excluded
                 if (isMimeExcluded(mimeType)) continue;
@@ -444,11 +356,11 @@ public class QuickContactActivity extends Activity {
                 final boolean isPrimary = dataItem.isPrimary();
                 final boolean isSuperPrimary = dataItem.isSuperPrimary();
 
-                if (dataKind != null) {
+                if (dataItem.getDataKind() != null) {
                     // Build an action for this data entry, find a mapping to a UI
                     // element, build its summary from the cursor, and collect it
                     // along with all others of this MIME-type.
-                    final Action action = new DataAction(context, dataItem, dataKind);
+                    final Action action = new DataAction(context, dataItem);
                     final boolean wasAdded = considerAdd(action, cache, isSuperPrimary);
                     if (wasAdded) {
                         // Remember the default
@@ -463,8 +375,8 @@ public class QuickContactActivity extends Activity {
                 if (status != null && dataItem instanceof EmailDataItem) {
                     final EmailDataItem email = (EmailDataItem) dataItem;
                     final ImDataItem im = ImDataItem.createFromEmail(email);
-                    if (dataKind != null) {
-                        final DataAction action = new DataAction(context, im, dataKind);
+                    if (im.getDataKind() != null) {
+                        final DataAction action = new DataAction(context, im);
                         action.setPresence(status.getPresence());
                         considerAdd(action, cache, isSuperPrimary);
                     }
@@ -509,14 +421,13 @@ public class QuickContactActivity extends Activity {
                 mSortedActionMimeTypes.add(mimeType);
             }
         }
-        mPagerAdapter.notifyDataSetChanged();
 
         mStopWatch.lap("mt"); // Mime types initialized
 
         // Add buttons for each mimetype
         mTrack.removeAllViews();
         for (String mimeType : mSortedActionMimeTypes) {
-            final View actionView = inflateAction(mimeType, cache, mTrack, data.getDisplayName());
+            final View actionView = inflateAction(mimeType, cache, mTrack);
             mTrack.addView(actionView);
         }
 
@@ -547,29 +458,10 @@ public class QuickContactActivity extends Activity {
     }
 
     /**
-     * Bind the correct image resource and click handlers to the header views
-     *
-     * @param canAdd Whether or not the user can directly add information in this quick contact
-     * to their local contacts
-     */
-    private void configureHeaderClickActions(boolean canAdd) {
-        if (canAdd) {
-            mOpenDetailsOrAddContactImage.setImageResource(R.drawable.ic_add_contact_holo_dark);
-            mOpenDetailsOrAddContactImage.setOnClickListener(mAddToContactsClickHandler);
-            mPhotoView.setOnClickListener(mAddToContactsClickHandler);
-        } else {
-            mOpenDetailsOrAddContactImage.setImageResource(R.drawable.ic_contacts_holo_dark);
-            mOpenDetailsOrAddContactImage.setOnClickListener(mOpenDetailsClickHandler);
-            mPhotoView.setOnClickListener(mOpenDetailsClickHandler);
-        }
-    }
-
-    /**
      * Inflate the in-track view for the action of the given MIME-type, collapsing duplicate values.
      * Will use the icon provided by the {@link DataKind}.
      */
-    private View inflateAction(String mimeType, ResolveCache resolveCache,
-                               ViewGroup root, String name) {
+    private View inflateAction(String mimeType, ResolveCache resolveCache, ViewGroup root) {
         final CheckableImageView typeView = (CheckableImageView) getLayoutInflater().inflate(
                 R.layout.quickcontact_track_button, root, false);
 
@@ -578,7 +470,7 @@ public class QuickContactActivity extends Activity {
         final Action firstInfo = children.get(0);
 
         // Set icon and listen for clicks
-        final CharSequence descrip = resolveCache.getDescription(firstInfo, name);
+        final CharSequence descrip = resolveCache.getDescription(firstInfo);
         final Drawable icon = resolveCache.getIcon(firstInfo);
         typeView.setChecked(false);
         typeView.setContentDescription(descrip);
@@ -655,9 +547,7 @@ public class QuickContactActivity extends Activity {
             if (mLookupUri == null) {
                 Log.wtf(TAG, "Lookup uri wasn't initialized. Loader was started too early");
             }
-            return new ContactLoader(getApplicationContext(), mLookupUri,
-                    false /*loadGroupMetaData*/, false /*loadInvitableAccountTypes*/,
-                    false /*postViewNotification*/, true /*computeFormattedPhoneNumber*/);
+            return new ContactLoader(getApplicationContext(), mLookupUri, false);
         }
     };
 
@@ -679,8 +569,8 @@ public class QuickContactActivity extends Activity {
 
         @Override
         public Fragment getItem(int position) {
+            QuickContactListFragment fragment = new QuickContactListFragment();
             final String mimeType = mSortedActionMimeTypes.get(position);
-            QuickContactListFragment fragment = new QuickContactListFragment(mimeType);
             final List<Action> actions = mActions.get(mimeType);
             fragment.setActions(actions);
             return fragment;
@@ -690,50 +580,22 @@ public class QuickContactActivity extends Activity {
         public int getCount() {
             return mSortedActionMimeTypes.size();
         }
-
-        @Override
-        public int getItemPosition(Object object) {
-            final QuickContactListFragment fragment = (QuickContactListFragment) object;
-            final String mimeType = fragment.getMimeType();
-            for (int i = 0; i < mSortedActionMimeTypes.size(); i++) {
-                if (mimeType.equals(mSortedActionMimeTypes.get(i))) {
-                    return i;
-                }
-            }
-            return PagerAdapter.POSITION_NONE;
-        }
     }
 
     private class PageChangeListener extends SimpleOnPageChangeListener {
-        private int mScrollingState = ViewPager.SCROLL_STATE_IDLE;
-
         @Override
         public void onPageSelected(int position) {
             final CheckableImageView actionView = getActionViewAt(position);
             mTrackScroller.requestChildRectangleOnScreen(actionView,
                     new Rect(0, 0, actionView.getWidth(), actionView.getHeight()), false);
-            // Don't render rectangle if we are currently scrolling to prevent it from flickering
-            if (mScrollingState == ViewPager.SCROLL_STATE_IDLE) {
-                renderSelectedRectangle(position, 0);
-            }
-        }
-
-        @Override
-        public void onPageScrollStateChanged(int state) {
-            super.onPageScrollStateChanged(state);
-            mScrollingState = state;
         }
 
         @Override
         public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
-            renderSelectedRectangle(position, positionOffset);
-        }
-
-        private void renderSelectedRectangle(int position, float positionOffset) {
             final RelativeLayout.LayoutParams layoutParams =
                     (RelativeLayout.LayoutParams) mSelectedTabRectangle.getLayoutParams();
-            final int width = layoutParams.width;
-            layoutParams.setMarginStart((int) ((position + positionOffset) * width));
+            final int width = mSelectedTabRectangle.getWidth();
+            layoutParams.leftMargin = (int) ((position + positionOffset) * width);
             mSelectedTabRectangle.setLayoutParams(layoutParams);
         }
     }

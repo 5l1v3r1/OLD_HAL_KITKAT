@@ -179,7 +179,7 @@ public class BaseVoicemailProviderTest extends BaseContactsProvider2Test {
         }
 
         @Override
-        protected String getCallingPackage_() {
+        protected String getCallingPackage() {
             return getContext().getPackageName();
         }
 

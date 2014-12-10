@@ -57,7 +57,6 @@ public class DownloadManager {
     public static final int STATE_DOWNLOADING       = 0x81;
     public static final int STATE_TRANSIENT_FAILURE = 0x82;
     public static final int STATE_PERMANENT_FAILURE = 0x87;
-    public static final int STATE_PRE_DOWNLOADING   = 0x88;
 
     private final Context mContext;
     private final Handler mHandler;
@@ -189,8 +188,8 @@ public class DownloadManager {
         try {
             NotificationInd nInd = (NotificationInd) PduPersister.getPduPersister(mContext)
                     .load(uri);
-            if ((nInd.getExpiry() < System.currentTimeMillis() / 1000L)
-                    && (state == STATE_DOWNLOADING || state == STATE_PRE_DOWNLOADING)) {
+            if ((nInd.getExpiry() < System.currentTimeMillis()/1000L)
+                && (state == STATE_DOWNLOADING)) {
                 mHandler.post(new Runnable() {
                     public void run() {
                         Toast.makeText(mContext, R.string.service_message_not_found,

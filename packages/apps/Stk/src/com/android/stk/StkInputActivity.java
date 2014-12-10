@@ -25,7 +25,6 @@ import android.os.Handler;
 import android.os.Message;
 import android.text.Editable;
 import android.text.InputFilter;
-import android.text.InputType;
 import android.text.TextWatcher;
 import android.text.method.PasswordTransformationMethod;
 import android.view.KeyEvent;
@@ -257,14 +256,9 @@ public class StkInputActivity extends Activity implements View.OnClickListener,
     }
 
     private void startTimeOut() {
-        int duration = StkApp.calculateDurationInMilis(mStkInput.duration);
-
-        if (duration <= 0) {
-            duration = StkApp.UI_TIMEOUT;
-        }
         cancelTimeOut();
         mTimeoutHandler.sendMessageDelayed(mTimeoutHandler
-                .obtainMessage(MSG_ID_TIMEOUT), duration);
+                .obtainMessage(MSG_ID_TIMEOUT), StkApp.UI_TIMEOUT);
     }
 
     private void configInputDisplay() {
@@ -304,8 +298,8 @@ public class StkInputActivity extends Activity implements View.OnClickListener,
             numOfCharsView.setText(lengthLimit);
 
             if (!mStkInput.echo) {
-                mTextIn.setInputType(InputType.TYPE_CLASS_NUMBER
-                                     | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+                mTextIn.setTransformationMethod(PasswordTransformationMethod
+                        .getInstance());
             }
             // Set default text if present.
             if (mStkInput.defaultText != null) {

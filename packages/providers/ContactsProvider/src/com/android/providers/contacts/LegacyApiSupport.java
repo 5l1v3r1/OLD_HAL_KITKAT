@@ -848,12 +848,11 @@ public class LegacyApiSupport {
     }
 
     private long getRequiredValue(ContentValues values, String column) {
-        final Long value = values.getAsLong(column);
-        if (value == null) {
+        if (!values.containsKey(column)) {
             throw new RuntimeException("Required value: " + column);
         }
 
-        return value;
+        return values.getAsLong(column);
     }
 
     private long insertPeople(ContentValues values) {
@@ -1150,9 +1149,12 @@ public class LegacyApiSupport {
     }
 
     private void updateContactTime(long rawContactId, ContentValues values) {
-        final Long storedTimeContacted = values.getAsLong(People.LAST_TIME_CONTACTED);
-        final long lastTimeContacted = storedTimeContacted != null ?
-            storedTimeContacted : System.currentTimeMillis();
+        long lastTimeContacted;
+        if (values.containsKey(People.LAST_TIME_CONTACTED)) {
+            lastTimeContacted = values.getAsLong(People.LAST_TIME_CONTACTED);
+        } else {
+            lastTimeContacted = System.currentTimeMillis();
+        }
 
         // TODO check sanctions
         long contactId = mDbHelper.getContactId(rawContactId);
@@ -1875,13 +1877,13 @@ public class LegacyApiSupport {
 
             case SEARCH_SUGGESTIONS:
                 return mGlobalSearchSupport.handleSearchSuggestionsQuery(
-                        db, uri, projection, limit, null);
+                        db, uri, projection, limit);
 
             case SEARCH_SHORTCUT: {
                 String lookupKey = uri.getLastPathSegment();
                 String filter = ContactsProvider2.getQueryParameter(uri, "filter");
                 return mGlobalSearchSupport.handleSearchShortcutRefresh(
-                        db, projection, lookupKey, filter, null);
+                        db, projection, lookupKey, filter);
             }
 
             case LIVE_FOLDERS_PEOPLE:

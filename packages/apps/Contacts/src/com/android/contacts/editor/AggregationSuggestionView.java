@@ -28,10 +28,8 @@ import android.widget.TextView;
 import com.android.contacts.R;
 import com.android.contacts.editor.AggregationSuggestionEngine.RawContact;
 import com.android.contacts.editor.AggregationSuggestionEngine.Suggestion;
-import com.android.contacts.common.ContactPhotoManager;
-import com.android.contacts.common.model.AccountTypeManager;
-import com.android.contacts.common.model.account.AccountType;
-
+import com.android.contacts.model.AccountTypeManager;
+import com.android.contacts.model.account.AccountType;
 import com.google.common.collect.Lists;
 
 import java.util.ArrayList;
@@ -88,8 +86,7 @@ public class AggregationSuggestionView extends LinearLayout {
             photo.setImageBitmap(BitmapFactory.decodeByteArray(
                     suggestion.photo, 0, suggestion.photo.length));
         } else {
-            photo.setImageDrawable(ContactPhotoManager.getDefaultAvatarDrawableForContact(
-                    getResources(), false, null));
+            photo.setImageResource(R.drawable.ic_contact_picture_holo_light);
         }
 
         TextView name = (TextView) findViewById(R.id.aggregation_suggestion_name);

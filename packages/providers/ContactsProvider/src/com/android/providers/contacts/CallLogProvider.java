@@ -20,7 +20,6 @@ import static com.android.providers.contacts.util.DbQueryUtils.checkForSupported
 import static com.android.providers.contacts.util.DbQueryUtils.getEqualityClause;
 import static com.android.providers.contacts.util.DbQueryUtils.getInequalityClause;
 
-import android.app.AppOpsManager;
 import android.content.ContentProvider;
 import android.content.ContentUris;
 import android.content.ContentValues;
@@ -33,7 +32,6 @@ import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.provider.CallLog;
 import android.provider.CallLog.Calls;
-import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.providers.contacts.ContactsDatabaseHelper.Tables;
@@ -41,7 +39,6 @@ import com.android.providers.contacts.util.SelectionBuilder;
 import com.google.common.annotations.VisibleForTesting;
 
 import java.util.HashMap;
-import java.util.List;
 
 /**
  * Call log content provider.
@@ -71,7 +68,6 @@ public class CallLogProvider extends ContentProvider {
         sCallsProjectionMap = new HashMap<String, String>();
         sCallsProjectionMap.put(Calls._ID, Calls._ID);
         sCallsProjectionMap.put(Calls.NUMBER, Calls.NUMBER);
-        sCallsProjectionMap.put(Calls.NUMBER_PRESENTATION, Calls.NUMBER_PRESENTATION);
         sCallsProjectionMap.put(Calls.DATE, Calls.DATE);
         sCallsProjectionMap.put(Calls.DURATION, Calls.DURATION);
         sCallsProjectionMap.put(Calls.TYPE, Calls.TYPE);
@@ -98,7 +94,6 @@ public class CallLogProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
-        setAppOps(AppOpsManager.OP_READ_CALL_LOG, AppOpsManager.OP_WRITE_CALL_LOG);
         if (Log.isLoggable(Constants.PERFORMANCE_TAG, Log.DEBUG)) {
             Log.d(Constants.PERFORMANCE_TAG, "CallLogProvider.onCreate start");
         }
@@ -148,16 +143,10 @@ public class CallLogProvider extends ContentProvider {
             }
 
             case CALLS_FILTER: {
-                List<String> pathSegments = uri.getPathSegments();
-                String phoneNumber = pathSegments.size() >= 2 ? pathSegments.get(2) : null;
-                if (!TextUtils.isEmpty(phoneNumber)) {
-                    qb.appendWhere("PHONE_NUMBERS_EQUAL(number, ");
-                    qb.appendWhereEscapeString(phoneNumber);
-                    qb.appendWhere(mUseStrictPhoneNumberComparation ? ", 1)" : ", 0)");
-                } else {
-                    qb.appendWhere(Calls.NUMBER_PRESENTATION + "!="
-                            + Calls.PRESENTATION_ALLOWED);
-                }
+                String phoneNumber = uri.getPathSegments().get(2);
+                qb.appendWhere("PHONE_NUMBERS_EQUAL(number, ");
+                qb.appendWhereEscapeString(phoneNumber);
+                qb.appendWhere(mUseStrictPhoneNumberComparation ? ", 1)" : ", 0)");
                 break;
             }
 
@@ -315,9 +304,9 @@ public class CallLogProvider extends ContentProvider {
         return new DbModifierWithNotification(Tables.CALLS, insertHelper, context());
     }
 
-    private static final Integer VOICEMAIL_TYPE = new Integer(Calls.VOICEMAIL_TYPE);
     private boolean hasVoicemailValue(ContentValues values) {
-        return VOICEMAIL_TYPE.equals(values.getAsInteger(Calls.TYPE));
+        return values.containsKey(Calls.TYPE) &&
+                values.getAsInteger(Calls.TYPE).equals(Calls.VOICEMAIL_TYPE);
     }
 
     /**

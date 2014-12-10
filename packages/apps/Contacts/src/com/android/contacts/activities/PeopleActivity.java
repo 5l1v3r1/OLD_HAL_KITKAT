@@ -27,7 +27,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Parcelable;
-import android.os.UserManager;
 import android.preference.PreferenceActivity;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.Contacts;
@@ -37,7 +36,6 @@ import android.provider.Settings;
 import android.support.v13.app.FragmentPagerAdapter;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
@@ -51,6 +49,7 @@ import android.widget.Toast;
 
 import com.android.contacts.ContactSaveService;
 import com.android.contacts.ContactsActivity;
+import com.android.contacts.ContactsUtils;
 import com.android.contacts.R;
 import com.android.contacts.activities.ActionBarAdapter.TabState;
 import com.android.contacts.detail.ContactDetailFragment;
@@ -58,44 +57,43 @@ import com.android.contacts.detail.ContactDetailLayoutController;
 import com.android.contacts.detail.ContactDetailUpdatesFragment;
 import com.android.contacts.detail.ContactLoaderFragment;
 import com.android.contacts.detail.ContactLoaderFragment.ContactLoaderFragmentListener;
-import com.android.contacts.common.ContactsUtils;
-import com.android.contacts.common.dialog.ClearFrequentsDialog;
+import com.android.contacts.dialog.ClearFrequentsDialog;
 import com.android.contacts.group.GroupBrowseListFragment;
 import com.android.contacts.group.GroupBrowseListFragment.OnGroupBrowserActionListener;
 import com.android.contacts.group.GroupDetailFragment;
 import com.android.contacts.interactions.ContactDeletionInteraction;
-import com.android.contacts.common.interactions.ImportExportDialogFragment;
+import com.android.contacts.interactions.ImportExportDialogFragment;
+import com.android.contacts.interactions.PhoneNumberInteraction;
 import com.android.contacts.list.ContactBrowseListFragment;
-import com.android.contacts.common.list.ContactEntryListFragment;
-import com.android.contacts.common.list.ContactListFilter;
-import com.android.contacts.common.list.ContactListFilterController;
-import com.android.contacts.common.list.ContactTileAdapter.DisplayType;
+import com.android.contacts.list.ContactEntryListFragment;
+import com.android.contacts.list.ContactListFilter;
+import com.android.contacts.list.ContactListFilterController;
+import com.android.contacts.list.ContactTileAdapter.DisplayType;
 import com.android.contacts.list.ContactTileFrequentFragment;
 import com.android.contacts.list.ContactTileListFragment;
 import com.android.contacts.list.ContactsIntentResolver;
 import com.android.contacts.list.ContactsRequest;
 import com.android.contacts.list.ContactsUnavailableFragment;
 import com.android.contacts.list.DefaultContactBrowseListFragment;
-import com.android.contacts.common.list.DirectoryListLoader;
+import com.android.contacts.list.DirectoryListLoader;
 import com.android.contacts.list.OnContactBrowserActionListener;
 import com.android.contacts.list.OnContactsUnavailableActionListener;
 import com.android.contacts.list.ProviderStatusWatcher;
 import com.android.contacts.list.ProviderStatusWatcher.ProviderStatusListener;
-import com.android.contacts.common.model.Contact;
-import com.android.contacts.common.model.account.AccountWithDataSet;
+import com.android.contacts.model.Contact;
+import com.android.contacts.model.account.AccountWithDataSet;
 import com.android.contacts.preference.ContactsPreferenceActivity;
 import com.android.contacts.preference.DisplayOptionsPreferenceFragment;
-import com.android.contacts.common.util.AccountFilterUtil;
+import com.android.contacts.util.AccountFilterUtil;
 import com.android.contacts.util.AccountPromptUtils;
-import com.android.contacts.common.util.Constants;
+import com.android.contacts.util.Constants;
 import com.android.contacts.util.DialogManager;
 import com.android.contacts.util.HelpUtils;
 import com.android.contacts.util.PhoneCapabilityTester;
-import com.android.contacts.common.util.UriUtils;
+import com.android.contacts.util.UriUtils;
 import com.android.contacts.widget.TransitionAnimationView;
 
 import java.util.ArrayList;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -109,7 +107,8 @@ public class PeopleActivity extends ContactsActivity
 
     private static final String TAG = "PeopleActivity";
 
-    private static final int TAB_FADE_IN_DURATION = 500;
+    /** Shows a toogle button for hiding/showing updates. Don't submit with true */
+    private static final boolean DEBUG_TRANSITIONS = false;
 
     private static final String ENABLE_DEBUG_OPTIONS_HIDDEN_CODE = "debug debug!";
 
@@ -158,7 +157,6 @@ public class PeopleActivity extends ContactsActivity
 
     private View mFavoritesView;
     private View mBrowserView;
-    private TransitionAnimationView mPeopleActivityView;
     private TransitionAnimationView mContactDetailsView;
     private TransitionAnimationView mGroupDetailsView;
 
@@ -194,11 +192,6 @@ public class PeopleActivity extends ContactsActivity
      * that should be displayed in that mode.
      */
     private boolean mCurrentFilterIsValid;
-
-    /**
-     * This is to disable {@link #onOptionsItemSelected} when we trying to stop the activity.
-     */
-    private boolean mDisableOptionItemSelected;
 
     /** Sequential ID assigned to each instance; used for logging */
     private final int mInstanceId;
@@ -264,6 +257,7 @@ public class PeopleActivity extends ContactsActivity
             finish();
             return;
         }
+
         mContactListFilterController = ContactListFilterController.getInstance(this);
         mContactListFilterController.checkFilterValidity(false);
         mContactListFilterController.addListener(this);
@@ -272,7 +266,6 @@ public class PeopleActivity extends ContactsActivity
 
         mIsRecreatedInstance = (savedState != null);
         createViewsAndFragments(savedState);
-        getWindow().setBackgroundDrawableResource(R.color.background_primary);
         if (Log.isLoggable(Constants.PERFORMANCE_TAG, Log.DEBUG)) {
             Log.d(Constants.PERFORMANCE_TAG, "PeopleActivity.onCreate finish");
         }
@@ -331,6 +324,7 @@ public class PeopleActivity extends ContactsActivity
             startActivity(redirect);
             return false;
         }
+        setTitle(mRequest.getActivityTitle());
         return true;
     }
 
@@ -398,7 +392,6 @@ public class PeopleActivity extends ContactsActivity
             // Prepare 2-pane only fragments/views...
 
             // Container views for fragments
-            mPeopleActivityView = getView(R.id.people_view);
             mFavoritesView = getView(R.id.favorites_view);
             mContactDetailsView = getView(R.id.contact_details_view);
             mGroupDetailsView = getView(R.id.group_details_view);
@@ -505,7 +498,6 @@ public class PeopleActivity extends ContactsActivity
         // Re-register the listener, which may have been cleared when onSaveInstanceState was
         // called.  See also: onSaveInstanceState
         mActionBarAdapter.setListener(this);
-        mDisableOptionItemSelected = false;
         if (mTabPager != null) {
             mTabPager.setOnPageChangeListener(mTabPagerListener);
         }
@@ -619,7 +611,7 @@ public class PeopleActivity extends ContactsActivity
         // If we are switching from one group to another, do a cross-fade
         if (mGroupDetailFragment != null && mGroupDetailFragment.getGroupUri() != null &&
                 !UriUtils.areEqual(mGroupDetailFragment.getGroupUri(), groupUri)) {
-            mGroupDetailsView.startMaskTransition(false, -1);
+            mGroupDetailsView.startMaskTransition(false);
         }
         mGroupDetailFragment.loadGroup(groupUri);
         invalidateOptionsMenuIfNeeded();
@@ -698,7 +690,6 @@ public class PeopleActivity extends ContactsActivity
         if (mActionBarAdapter.isSearchMode()) {
             tab = TabState.ALL;
         }
-
         switch (tab) {
             case TabState.FAVORITES:
                 mFavoritesView.setVisibility(View.VISIBLE);
@@ -720,7 +711,6 @@ public class PeopleActivity extends ContactsActivity
                 mGroupDetailsView.setVisibility(View.GONE);
                 break;
         }
-        mPeopleActivityView.startMaskTransition(false, TAB_FADE_IN_DURATION);
         FragmentManager fragmentManager = getFragmentManager();
         FragmentTransaction ft = fragmentManager.beginTransaction();
 
@@ -997,31 +987,20 @@ public class PeopleActivity extends ContactsActivity
         mAllFragment.setFilter(mContactListFilterController.getFilter());
 
         final boolean useTwoPane = PhoneCapabilityTester.isUsingTwoPanes(this);
-
-        mAllFragment.setVerticalScrollbarPosition(getScrollBarPosition(useTwoPane));
+        mAllFragment.setVerticalScrollbarPosition(
+                useTwoPane
+                        ? View.SCROLLBAR_POSITION_LEFT
+                        : View.SCROLLBAR_POSITION_RIGHT);
         mAllFragment.setSelectionVisible(useTwoPane);
         mAllFragment.setQuickContactEnabled(!useTwoPane);
     }
 
-    private int getScrollBarPosition(boolean useTwoPane) {
-        final boolean isLayoutRtl = isRTL();
-        final int position;
-        if (useTwoPane) {
-            position = isLayoutRtl ? View.SCROLLBAR_POSITION_RIGHT : View.SCROLLBAR_POSITION_LEFT;
-        } else {
-            position = isLayoutRtl ? View.SCROLLBAR_POSITION_LEFT : View.SCROLLBAR_POSITION_RIGHT;
-        }
-        return position;
-    }
-
-    private boolean isRTL() {
-        final Locale locale = Locale.getDefault();
-        return TextUtils.getLayoutDirectionFromLocale(locale) == View.LAYOUT_DIRECTION_RTL;
-    }
-
     private void configureGroupListFragment() {
         final boolean useTwoPane = PhoneCapabilityTester.isUsingTwoPanes(this);
-        mGroupsFragment.setVerticalScrollbarPosition(getScrollBarPosition(useTwoPane));
+        mGroupsFragment.setVerticalScrollbarPosition(
+                useTwoPane
+                        ? View.SCROLLBAR_POSITION_LEFT
+                        : View.SCROLLBAR_POSITION_RIGHT);
         mGroupsFragment.setSelectionVisible(useTwoPane);
     }
 
@@ -1056,13 +1035,7 @@ public class PeopleActivity extends ContactsActivity
             // If there are no accounts on the device and we should show the "no account" prompt
             // (based on {@link SharedPreferences}), then launch the account setup activity so the
             // user can sign-in or create an account.
-            //
-            // Also check for ability to modify accounts.  In limited user mode, you can't modify
-            // accounts so there is no point sending users to account setup activity.
-            final UserManager userManager = UserManager.get(this);
-            final boolean disallowModifyAccounts = userManager.getUserRestrictions().getBoolean(
-                    UserManager.DISALLOW_MODIFY_ACCOUNTS);
-            if (!disallowModifyAccounts && !areContactWritableAccountsAvailable() &&
+            if (!areContactWritableAccountsAvailable() &&
                     AccountPromptUtils.shouldShowAccountPrompt(this)) {
                 AccountPromptUtils.launchAccountPrompt(this);
                 return;
@@ -1154,6 +1127,16 @@ public class PeopleActivity extends ContactsActivity
             ContentValues values = new ContentValues(1);
             values.put(Contacts.STARRED, 0);
             getContentResolver().update(contactUri, values, null, null);
+        }
+
+        @Override
+        public void onCallContactAction(Uri contactUri) {
+            PhoneNumberInteraction.startInteractionForPhoneCall(PeopleActivity.this, contactUri);
+        }
+
+        @Override
+        public void onSmsContactAction(Uri contactUri) {
+            PhoneNumberInteraction.startInteractionForTextMessage(PeopleActivity.this, contactUri);
         }
 
         @Override
@@ -1273,8 +1256,7 @@ public class PeopleActivity extends ContactsActivity
 
         @Override
         public void onImportContactsFromFileAction() {
-            ImportExportDialogFragment.show(getFragmentManager(), areContactsAvailable(),
-                    PeopleActivity.class);
+            ImportExportDialogFragment.show(getFragmentManager(), areContactsAvailable());
         }
 
         @Override
@@ -1379,6 +1361,20 @@ public class PeopleActivity extends ContactsActivity
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.people_options, menu);
 
+        if (DEBUG_TRANSITIONS && mContactDetailLoaderFragment != null) {
+            final MenuItem toggleSocial =
+                    menu.add(mContactDetailLoaderFragment.getLoadStreamItems() ? "less" : "more");
+            toggleSocial.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+            toggleSocial.setOnMenuItemClickListener(new OnMenuItemClickListener() {
+                @Override
+                public boolean onMenuItemClick(MenuItem item) {
+                    mContactDetailLoaderFragment.toggleLoadStreamItems();
+                    invalidateOptionsMenu();
+                    return false;
+                }
+            });
+        }
+
         return true;
     }
 
@@ -1435,7 +1431,7 @@ public class PeopleActivity extends ContactsActivity
         } else {
             switch (mActionBarAdapter.getCurrentTab()) {
                 case TabState.FAVORITES:
-                    addContactMenu.setVisible(true);
+                    addContactMenu.setVisible(false);
                     addGroupMenu.setVisible(false);
                     contactsFilterMenu.setVisible(false);
                     clearFrequentsMenu.setVisible(hasFrequents());
@@ -1494,10 +1490,6 @@ public class PeopleActivity extends ContactsActivity
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        if (mDisableOptionItemSelected) {
-            return false;
-        }
-
         switch (item.getItemId()) {
             case android.R.id.home: {
                 // The home icon on the action bar is pressed
@@ -1518,7 +1510,7 @@ public class PeopleActivity extends ContactsActivity
                     intent.putExtra(PreferenceActivity.EXTRA_SHOW_FRAGMENT,
                             DisplayOptionsPreferenceFragment.class.getName());
                     intent.putExtra(PreferenceActivity.EXTRA_SHOW_FRAGMENT_TITLE,
-                            R.string.activity_title_settings);
+                            R.string.preference_displayOptions);
                 }
                 startActivity(intent);
                 return true;
@@ -1554,8 +1546,7 @@ public class PeopleActivity extends ContactsActivity
                 return true;
             }
             case R.id.menu_import_export: {
-                ImportExportDialogFragment.show(getFragmentManager(), areContactsAvailable(),
-                        PeopleActivity.class);
+                ImportExportDialogFragment.show(getFragmentManager(), areContactsAvailable());
                 return true;
             }
             case R.id.menu_clear_frequents: {
@@ -1716,7 +1707,6 @@ public class PeopleActivity extends ContactsActivity
         // Clear the listener to make sure we don't get callbacks after onSaveInstanceState,
         // in order to avoid doing fragment transactions after it.
         // TODO Figure out a better way to deal with the issue.
-        mDisableOptionItemSelected = true;
         mActionBarAdapter.setListener(null);
         if (mTabPager != null) {
             mTabPager.setOnPageChangeListener(null);
