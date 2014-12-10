@@ -21,7 +21,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import android.app.AppOpsManager;
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
@@ -105,11 +104,6 @@ public class MmsSmsProvider extends ContentProvider {
      * the name of the table that is used to store the canonical addresses for both SMS and MMS.
      */
     private static final String TABLE_CANONICAL_ADDRESSES = "canonical_addresses";
-
-    /**
-     * the name of the table that is used to store the conversation threads.
-     */
-    static final String TABLE_THREADS = "threads";
 
     // These constants are used to construct union queries across the
     // MMS and SMS base tables.
@@ -283,7 +277,6 @@ public class MmsSmsProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
-        setAppOps(AppOpsManager.OP_READ_SMS, AppOpsManager.OP_WRITE_SMS);
         mOpenHelper = MmsSmsDatabaseHelper.getInstance(getContext());
         mUseStrictPhoneNumberComparation =
             getContext().getResources().getBoolean(
@@ -605,7 +598,7 @@ public class MmsSmsProvider extends ContentProvider {
         }
         values.put(ThreadsColumns.MESSAGE_COUNT, 0);
 
-        long result = mOpenHelper.getWritableDatabase().insert(TABLE_THREADS, null, values);
+        long result = mOpenHelper.getWritableDatabase().insert("threads", null, values);
         Log.d(LOG_TAG, "insertThread: created new thread_id " + result +
                 " for recipientIds " + /*recipientIds*/ "xxxxxxx");
 
@@ -644,35 +637,24 @@ public class MmsSmsProvider extends ContentProvider {
         }
 
         String[] selectionArgs = new String[] { recipientIds };
-
         SQLiteDatabase db = mOpenHelper.getReadableDatabase();
-        db.beginTransaction();
-        Cursor cursor = null;
-        try {
-            // Find the thread with the given recipients
+        Cursor cursor = db.rawQuery(THREAD_QUERY, selectionArgs);
+
+        if (cursor.getCount() == 0) {
+            cursor.close();
+
+            Log.d(LOG_TAG, "getThreadId: create new thread_id for recipients " +
+                    /*recipients*/ "xxxxxxxx");
+            insertThread(recipientIds, recipients.size());
+
+            db = mOpenHelper.getReadableDatabase();  // In case insertThread closed it
             cursor = db.rawQuery(THREAD_QUERY, selectionArgs);
-
-            if (cursor.getCount() == 0) {
-                // No thread with those recipients exists, so create the thread.
-                cursor.close();
-
-                Log.d(LOG_TAG, "getThreadId: create new thread_id for recipients " +
-                        /*recipients*/ "xxxxxxxx");
-                insertThread(recipientIds, recipients.size());
-
-                // The thread was just created, now find it and return it.
-                cursor = db.rawQuery(THREAD_QUERY, selectionArgs);
-            }
-            db.setTransactionSuccessful();
-        } catch (Throwable ex) {
-            Log.e(LOG_TAG, ex.getMessage(), ex);
-        } finally {
-            db.endTransaction();
         }
 
-        if (cursor != null && cursor.getCount() > 1) {
+        if (cursor.getCount() > 1) {
             Log.w(LOG_TAG, "getThreadId: why is cursorCount=" + cursor.getCount());
         }
+
         return cursor;
     }
 
@@ -718,7 +700,7 @@ public class MmsSmsProvider extends ContentProvider {
      */
     private Cursor getSimpleConversations(String[] projection, String selection,
             String[] selectionArgs, String sortOrder) {
-        return mOpenHelper.getReadableDatabase().query(TABLE_THREADS, projection,
+        return mOpenHelper.getReadableDatabase().query("threads", projection,
                 selection, selectionArgs, null, null, " date DESC");
     }
 
@@ -947,12 +929,12 @@ public class MmsSmsProvider extends ContentProvider {
      * Use this query:
      *
      * SELECT ...
-     *   FROM pdu, (SELECT msg_id AS address_msg_id
+     *   FROM pdu, (SELECT _id AS address_id
      *              FROM addr
      *              WHERE (address='<phoneNumber>' OR
      *              PHONE_NUMBERS_EQUAL(addr.address, '<phoneNumber>', 1/0)))
      *             AS matching_addresses
-     *   WHERE pdu._id = matching_addresses.address_msg_id
+     *   WHERE pdu._id = matching_addresses.address_id
      * UNION
      * SELECT ...
      *   FROM sms
@@ -965,7 +947,7 @@ public class MmsSmsProvider extends ContentProvider {
         String finalMmsSelection =
                 concatSelections(
                         selection,
-                        "pdu._id = matching_addresses.address_msg_id");
+                        "pdu._id = matching_addresses.address_id");
         String finalSmsSelection =
                 concatSelections(
                         selection,
@@ -979,7 +961,7 @@ public class MmsSmsProvider extends ContentProvider {
         smsQueryBuilder.setDistinct(true);
         mmsQueryBuilder.setTables(
                 MmsProvider.TABLE_PDU +
-                ", (SELECT msg_id AS address_msg_id " +
+                ", (SELECT _id AS address_id " +
                 "FROM addr WHERE (address=" + escapedPhoneNumber +
                 " OR PHONE_NUMBERS_EQUAL(addr.address, " +
                 escapedPhoneNumber +
@@ -1023,7 +1005,7 @@ public class MmsSmsProvider extends ContentProvider {
         String[] columns = handleNullThreadsProjection(projection);
 
         queryBuilder.setDistinct(true);
-        queryBuilder.setTables(TABLE_THREADS);
+        queryBuilder.setTables("threads");
         return queryBuilder.query(
                 mOpenHelper.getReadableDatabase(), columns, finalSelection,
                 selectionArgs, sortOrder, null, null);
@@ -1195,7 +1177,7 @@ public class MmsSmsProvider extends ContentProvider {
                 MmsSmsDatabaseHelper.updateAllThreads(db, null, null);
                 break;
             case URI_OBSOLETE_THREADS:
-                affectedRows = db.delete(TABLE_THREADS,
+                affectedRows = db.delete("threads",
                         "_id NOT IN (SELECT DISTINCT thread_id FROM sms where thread_id NOT NULL " +
                         "UNION SELECT DISTINCT thread_id FROM pdu where thread_id NOT NULL)", null);
                 break;

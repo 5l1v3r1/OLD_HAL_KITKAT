@@ -16,9 +16,7 @@
 
 package com.android.providers.telephony;
 
-import android.app.AppOpsManager;
 import android.content.ContentProvider;
-import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -65,7 +63,6 @@ public class MmsProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
-        setAppOps(AppOpsManager.OP_READ_SMS, AppOpsManager.OP_WRITE_SMS);
         mOpenHelper = MmsSmsDatabaseHelper.getInstance(getContext());
         return true;
     }
@@ -268,10 +265,6 @@ public class MmsProvider extends ContentProvider {
 
     @Override
     public Uri insert(Uri uri, ContentValues values) {
-        // Don't let anyone insert anything with the _data column
-        if (values != null && values.containsKey(Part._DATA)) {
-            return null;
-        }
         int msgBox = Mms.MESSAGE_BOX_ALL;
         boolean notify = true;
 
@@ -686,10 +679,6 @@ public class MmsProvider extends ContentProvider {
     @Override
     public int update(Uri uri, ContentValues values,
             String selection, String[] selectionArgs) {
-        // Don't let anyone update the _data column
-        if (values != null && values.containsKey(Part._DATA)) {
-            return 0;
-        }
         int match = sURLMatcher.match(uri);
         if (LOCAL_LOGV) {
             Log.v(TAG, "Update uri=" + uri + ", match=" + match);
@@ -775,50 +764,20 @@ public class MmsProvider extends ContentProvider {
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        // TODO do we even need this anymore?
+        ParcelFileDescriptor fd;
         int match = sURLMatcher.match(uri);
 
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
-            Log.d(TAG, "openFile: uri=" + uri + ", mode=" + mode + ", match=" + match);
+            Log.d(TAG, "openFile: uri=" + uri + ", mode=" + mode);
         }
 
-        if (match != MMS_PART_ID) {
-            return null;
+        switch (match) {
+            default:
+                fd = openFileHelper(uri, mode);
         }
 
-        // Verify that the _data path points to mms data
-        Cursor c = query(uri, new String[]{"_data"}, null, null, null);
-        int count = (c != null) ? c.getCount() : 0;
-        if (count != 1) {
-            // If there is not exactly one result, throw an appropriate
-            // exception.
-            if (c != null) {
-                c.close();
-            }
-            if (count == 0) {
-                throw new FileNotFoundException("No entry for " + uri);
-            }
-            throw new FileNotFoundException("Multiple items at " + uri);
-        }
-
-        c.moveToFirst();
-        int i = c.getColumnIndex("_data");
-        String path = (i >= 0 ? c.getString(i) : null);
-        c.close();
-
-        if (path == null) {
-            return null;
-        }
-        try {
-            File filePath = new File(path);
-            if (!filePath.getCanonicalPath()
-                    .startsWith(getContext().getApplicationInfo().dataDir + "/app_parts/")) {
-                return null;
-            }
-        } catch (IOException e) {
-            return null;
-        }
-
-        return openFileHelper(uri, mode);
+        return fd;
     }
 
     private void filterUnsupportedKeys(ContentValues values) {
