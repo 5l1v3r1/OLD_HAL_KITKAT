@@ -218,7 +218,7 @@ public class KeyguardSimPukView extends KeyguardAbsKeyInputView
 
         abstract void onSimLockChangedResponse(final int result, final int attemptsRemaining);
 
-        @Override
+        /*@Override
         public void run() {
             try {
                 Log.v(TAG, "call supplyPukReportResult()");
@@ -238,7 +238,7 @@ public class KeyguardSimPukView extends KeyguardAbsKeyInputView
                     }
                 });
             }
-        }
+        }*/
     }
 
     private Dialog getSimUnlockProgressDialog() {
@@ -306,7 +306,7 @@ public class KeyguardSimPukView extends KeyguardAbsKeyInputView
                             if (mSimUnlockProgressDialog != null) {
                                 mSimUnlockProgressDialog.hide();
                             }
-                            if (result == PhoneConstants.PIN_RESULT_SUCCESS) {
+                            /*if (result == PhoneConstants.PIN_RESULT_SUCCESS) {
                                 KeyguardUpdateMonitor.getInstance(getContext()).reportSimUnlocked();
                                 mCallback.dismiss(true);
                             } else {
@@ -327,7 +327,7 @@ public class KeyguardSimPukView extends KeyguardAbsKeyInputView
                                         + " UpdateSim.onSimCheckResponse: "
                                         + " attemptsRemaining=" + attemptsRemaining);
                                 mStateMachine.reset();
-                            }
+                            }*/
                             mCheckSimPukThread = null;
                         }
                     });

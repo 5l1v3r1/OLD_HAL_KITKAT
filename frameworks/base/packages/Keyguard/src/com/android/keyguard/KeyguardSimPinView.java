@@ -167,7 +167,7 @@ public class KeyguardSimPinView extends KeyguardAbsKeyInputView
 
         abstract void onSimCheckResponse(final int result, final int attemptsRemaining);
 
-        @Override
+       /* @Override
         public void run() {
             try {
                 Log.v(TAG, "call supplyPinReportResult()");
@@ -187,7 +187,7 @@ public class KeyguardSimPinView extends KeyguardAbsKeyInputView
                     }
                 });
             }
-        }
+        }*/
     }
 
     private Dialog getSimUnlockProgressDialog() {
@@ -219,12 +219,11 @@ public class KeyguardSimPinView extends KeyguardAbsKeyInputView
         return mRemainingAttemptsDialog;
     }
 
-    @Override
+    /*@Override
     protected void verifyPasswordAndUnlock() {
         String entry = mPasswordEntry.getText().toString();
 
         if (entry.length() < 4) {
-            // otherwise, display a message to the user, and don't submit.
             mSecurityMessageDisplay.setMessage(R.string.kg_invalid_sim_pin_hint, true);
             mPasswordEntry.setText("");
             mCallback.userActivity(0);
@@ -274,5 +273,6 @@ public class KeyguardSimPinView extends KeyguardAbsKeyInputView
             mCheckSimPinThread.start();
         }
     }
+*/
 }
 
