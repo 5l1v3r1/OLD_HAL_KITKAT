@@ -3191,7 +3191,7 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                     }
                     break;
                 }
-                case EVENT_ENABLE_FAIL_FAST_MOBILE_DATA: {
+                /*case EVENT_ENABLE_FAIL_FAST_MOBILE_DATA: {
                     int tag = mEnableFailFastMobileDataTag.get();
                     if (msg.arg1 == tag) {
                         MobileDataStateTracker mobileDst =
@@ -3204,7 +3204,7 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                                 + " != tag:" + tag);
                     }
                     break;
-                }
+                }*/
                 case EVENT_SAMPLE_INTERVAL_ELAPSED: {
                     handleNetworkSamplingTimeout();
                     break;
@@ -4019,7 +4019,8 @@ public class ConnectivityService extends IConnectivityManager.Stub {
     private boolean isMobileDataStateTrackerReady() {
         MobileDataStateTracker mdst =
                 (MobileDataStateTracker) mNetTrackers[ConnectivityManager.TYPE_MOBILE_HIPRI];
-        return (mdst != null) && (mdst.isReady());
+        //return (mdst != null) && (mdst.isReady());
+ return (mdst != null);
     }
 
     /**
@@ -4145,7 +4146,7 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                                 mIsProvisioningNetwork.set(true);
                                 MobileDataStateTracker mdst = (MobileDataStateTracker)
                                         mNetTrackers[ConnectivityManager.TYPE_MOBILE];
-                                mdst.setInternalDataEnable(false);
+                                //mdst.setInternalDataEnable(false);
                             } else {
                                 if (DBG) log("CheckMp.onComplete: warm (no dns/tcp), no url");
                             }
@@ -4318,19 +4319,19 @@ public class ConnectivityService extends IConnectivityManager.Stub {
             // if so we don't need to do anything active.
             MobileDataStateTracker mdstDefault = (MobileDataStateTracker)
                     mCs.mNetTrackers[ConnectivityManager.TYPE_MOBILE];
-            boolean isDefaultProvisioning = mdstDefault.isProvisioningNetwork();
-            log("isMobileOk: isDefaultProvisioning=" + isDefaultProvisioning);
+            //boolean isDefaultProvisioning = mdstDefault.isProvisioningNetwork();
+            //log("isMobileOk: isDefaultProvisioning=" + isDefaultProvisioning);
 
             MobileDataStateTracker mdstHipri = (MobileDataStateTracker)
                     mCs.mNetTrackers[ConnectivityManager.TYPE_MOBILE_HIPRI];
-            boolean isHipriProvisioning = mdstHipri.isProvisioningNetwork();
-            log("isMobileOk: isHipriProvisioning=" + isHipriProvisioning);
+            //boolean isHipriProvisioning = mdstHipri.isProvisioningNetwork();
+            //log("isMobileOk: isHipriProvisioning=" + isHipriProvisioning);
 
-            if (isDefaultProvisioning || isHipriProvisioning) {
+            /*if (isDefaultProvisioning || isHipriProvisioning) {
                 result = CMP_RESULT_CODE_PROVISIONING_NETWORK;
                 log("isMobileOk: X default || hipri is provisioning result=" + result);
                 return result;
-            }
+            }*/
 
             try {
                 // Continue trying to connect until time has run out
@@ -4389,13 +4390,13 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                         // Hipri has started check if this is a provisioning url
                         MobileDataStateTracker mdst = (MobileDataStateTracker)
                                 mCs.mNetTrackers[ConnectivityManager.TYPE_MOBILE_HIPRI];
-                        if (mdst.isProvisioningNetwork()) {
+                        /*if (mdst.isProvisioningNetwork()) {
                             result = CMP_RESULT_CODE_PROVISIONING_NETWORK;
                             if (DBG) log("isMobileOk: X isProvisioningNetwork result=" + result);
                             return result;
                         } else {
                             if (DBG) log("isMobileOk: isProvisioningNetwork is false, continue");
-                        }
+                        }*/
 
                         // Get of the addresses associated with the url host. We need to use the
                         // address otherwise HttpURLConnection object will use the name to get
@@ -4658,8 +4659,8 @@ public class ConnectivityService extends IConnectivityManager.Stub {
             mIsStartingProvisioning.set(true);
             MobileDataStateTracker mdst = (MobileDataStateTracker)
                     mNetTrackers[ConnectivityManager.TYPE_MOBILE];
-            mdst.setEnableFailFastMobileData(DctConstants.ENABLED);
-            mdst.enableMobileProvisioning(url);
+            //mdst.setEnableFailFastMobileData(DctConstants.ENABLED);
+            //mdst.enableMobileProvisioning(url);
         } else {
             if (DBG) log("handleMobileProvisioningAction: not prov network, launch browser directly");
             Intent newIntent = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN,
