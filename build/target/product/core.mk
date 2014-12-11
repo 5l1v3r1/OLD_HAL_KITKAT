@@ -22,7 +22,6 @@
 PRODUCT_PACKAGES += \
     BasicDreams \
     Browser \
-    Contacts \
     DocumentsUI \
     DownloadProviderUi \
     ExternalStorageProvider \
@@ -32,5 +31,5 @@ PRODUCT_PACKAGES += \
     ProxyHandler \
     SharedStorageBackup \
     VpnDialogs
-
+#    Contacts \
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_base.mk)
