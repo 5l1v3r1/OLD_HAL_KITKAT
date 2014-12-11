@@ -44,8 +44,8 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.android.internal.telephony.SmsApplication;
-import com.android.internal.telephony.SmsApplication.SmsApplicationData;
+//import com.android.internal.telephony.SmsApplication;
+//import com.android.internal.telephony.SmsApplication.SmsApplicationData;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.TelephonyProperties;
 import com.android.settings.nfc.NfcEnabler;
@@ -84,7 +84,7 @@ public class WirelessSettings extends RestrictedSettingsFragment
     private static final int MANAGE_MOBILE_PLAN_DIALOG_ID = 1;
     private static final String SAVED_MANAGE_MOBILE_PLAN_MSG = "mManageMobilePlanMessage";
 
-    private SmsListPreference mSmsApplicationPreference;
+    //private SmsListPreference mSmsApplicationPreference;
 
     public WirelessSettings() {
         super(null);
@@ -164,7 +164,7 @@ public class WirelessSettings extends RestrictedSettingsFragment
         }
     }
 
-    private void updateSmsApplicationSetting() {
+    /*private void updateSmsApplicationSetting() {
         log("updateSmsApplicationSetting:");
         ComponentName appName = SmsApplication.getDefaultSmsApplication(getActivity(), true);
         if (appName != null) {
@@ -208,7 +208,7 @@ public class WirelessSettings extends RestrictedSettingsFragment
         mSmsApplicationPreference.setEntryValues(entryValues);
         mSmsApplicationPreference.setEntryDrawables(entryImages);
         updateSmsApplicationSetting();
-    }
+    }*/
 
     @Override
     public Dialog onCreateDialog(int dialogId) {
@@ -245,10 +245,10 @@ public class WirelessSettings extends RestrictedSettingsFragment
         return toggleable != null && toggleable.contains(type);
     }
 
-    private boolean isSmsSupported() {
+    /*private boolean isSmsSupported() {
         // Some tablet has sim card but could not do telephony operations. Skip those.
         return (mTm.getPhoneType() != TelephonyManager.PHONE_TYPE_NONE);
-    }
+    }*/
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -274,9 +274,9 @@ public class WirelessSettings extends RestrictedSettingsFragment
         mAirplaneModeEnabler = new AirplaneModeEnabler(activity, mAirplaneModePreference);
         mNfcEnabler = new NfcEnabler(activity, nfc, androidBeam);
 
-        mSmsApplicationPreference = (SmsListPreference) findPreference(KEY_SMS_APPLICATION);
-        mSmsApplicationPreference.setOnPreferenceChangeListener(this);
-        initSmsApplicationSetting();
+        //mSmsApplicationPreference = (SmsListPreference) findPreference(KEY_SMS_APPLICATION);
+        //mSmsApplicationPreference.setOnPreferenceChangeListener(this);
+        //initSmsApplicationSetting();
 
         // Remove NSD checkbox by default
         getPreferenceScreen().removePreference(nsd);
@@ -347,9 +347,9 @@ public class WirelessSettings extends RestrictedSettingsFragment
         protectByRestrictions(KEY_MANAGE_MOBILE_PLAN);
 
         // Remove SMS Application if the device does not support SMS
-        if (!isSmsSupported()) {
+        /*if (!isSmsSupported()) {
             removePreference(KEY_SMS_APPLICATION);
-        }
+        }*/
 
         // Remove Airplane Mode settings if it's a stationary device such as a TV.
         if (getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION)) {
@@ -401,7 +401,7 @@ public class WirelessSettings extends RestrictedSettingsFragment
     public void onStart() {
         super.onStart();
 
-        initSmsApplicationSetting();
+        //initSmsApplicationSetting();
     }
 
     @Override
@@ -457,11 +457,11 @@ public class WirelessSettings extends RestrictedSettingsFragment
 
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
-        if (preference == mSmsApplicationPreference && newValue != null) {
+        /*if (preference == mSmsApplicationPreference && newValue != null) {
             SmsApplication.setDefaultApplication(newValue.toString(), getActivity());
             updateSmsApplicationSetting();
             return true;
-        }
-        return false;
+        }*/
+        return true;
     }
 }

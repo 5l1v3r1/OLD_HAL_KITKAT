@@ -942,7 +942,7 @@ public class RadioInfo extends Activity {
             if (index >= rates.length) {
                 index = 0;
             }
-            phone.setCellInfoListRate(rates[index]);
+            phone.setRadioPower(!isRadioOn());
             updateCellInfoListRate();
         }
     }

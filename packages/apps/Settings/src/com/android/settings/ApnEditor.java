@@ -57,7 +57,7 @@ public class ApnEditor extends PreferenceActivity
     private final static String KEY_ROAMING_PROTOCOL = "apn_roaming_protocol";
     private final static String KEY_CARRIER_ENABLED = "carrier_enabled";
     private final static String KEY_BEARER = "bearer";
-    private final static String KEY_MVNO_TYPE = "mvno_type";
+    //private final static String KEY_MVNO_TYPE = "mvno_type";
 
     private static final int MENU_DELETE = Menu.FIRST;
     private static final int MENU_SAVE = Menu.FIRST + 1;
@@ -83,8 +83,8 @@ public class ApnEditor extends PreferenceActivity
     private ListPreference mRoamingProtocol;
     private CheckBoxPreference mCarrierEnabled;
     private ListPreference mBearer;
-    private ListPreference mMvnoType;
-    private EditTextPreference mMvnoMatchData;
+    //private ListPreference mMvnoType;
+    //private EditTextPreference mMvnoMatchData;
 
     private String mCurMnc;
     private String mCurMcc;
@@ -120,8 +120,8 @@ public class ApnEditor extends PreferenceActivity
             Telephony.Carriers.CARRIER_ENABLED, // 17
             Telephony.Carriers.BEARER, // 18
             Telephony.Carriers.ROAMING_PROTOCOL, // 19
-            Telephony.Carriers.MVNO_TYPE,   // 20
-            Telephony.Carriers.MVNO_MATCH_DATA  // 21
+            //Telephony.Carriers.MVNO_TYPE,   // 20
+            //Telephony.Carriers.MVNO_MATCH_DATA  // 21
     };
 
     private static final int ID_INDEX = 0;
@@ -143,8 +143,8 @@ public class ApnEditor extends PreferenceActivity
     private static final int CARRIER_ENABLED_INDEX = 17;
     private static final int BEARER_INDEX = 18;
     private static final int ROAMING_PROTOCOL_INDEX = 19;
-    private static final int MVNO_TYPE_INDEX = 20;
-    private static final int MVNO_MATCH_DATA_INDEX = 21;
+    //private static final int MVNO_TYPE_INDEX = 20;
+    //private static final int MVNO_MATCH_DATA_INDEX = 21;
 
 
     @Override
@@ -182,9 +182,9 @@ public class ApnEditor extends PreferenceActivity
         mBearer = (ListPreference) findPreference(KEY_BEARER);
         mBearer.setOnPreferenceChangeListener(this);
 
-        mMvnoType = (ListPreference) findPreference(KEY_MVNO_TYPE);
-        mMvnoType.setOnPreferenceChangeListener(this);
-        mMvnoMatchData = (EditTextPreference) findPreference("mvno_match_data");
+        //mMvnoType = (ListPreference) findPreference(KEY_MVNO_TYPE);
+        //mMvnoType.setOnPreferenceChangeListener(this);
+        //mMvnoMatchData = (EditTextPreference) findPreference("mvno_match_data");
 
         mRes = getResources();
 
@@ -288,9 +288,9 @@ public class ApnEditor extends PreferenceActivity
             mRoamingProtocol.setValue(mCursor.getString(ROAMING_PROTOCOL_INDEX));
             mCarrierEnabled.setChecked(mCursor.getInt(CARRIER_ENABLED_INDEX)==1);
             mBearer.setValue(mCursor.getString(BEARER_INDEX));
-            mMvnoType.setValue(mCursor.getString(MVNO_TYPE_INDEX));
-            mMvnoMatchData.setEnabled(false);
-            mMvnoMatchData.setText(mCursor.getString(MVNO_MATCH_DATA_INDEX));
+            //mMvnoType.setValue(mCursor.getString(MVNO_TYPE_INDEX));
+            //mMvnoMatchData.setEnabled(false);
+            //mMvnoMatchData.setText(mCursor.getString(MVNO_MATCH_DATA_INDEX));
         }
 
         mName.setSummary(checkNull(mName.getText()));
@@ -324,9 +324,9 @@ public class ApnEditor extends PreferenceActivity
                 checkNull(protocolDescription(mRoamingProtocol.getValue(), mRoamingProtocol)));
         mBearer.setSummary(
                 checkNull(bearerDescription(mBearer.getValue())));
-        mMvnoType.setSummary(
+        /*mMvnoType.setSummary(
                 checkNull(mvnoDescription(mMvnoType.getValue())));
-        mMvnoMatchData.setSummary(checkNull(mMvnoMatchData.getText()));
+        mMvnoMatchData.setSummary(checkNull(mMvnoMatchData.getText()));*/
     }
 
     /**
@@ -362,7 +362,7 @@ public class ApnEditor extends PreferenceActivity
         }
     }
 
-    private String mvnoDescription(String newValue) {
+    /*private String mvnoDescription(String newValue) {
         int mvnoIndex = mMvnoType.findIndexOfValue(newValue);
         String oldValue = mMvnoType.getValue();
 
@@ -393,7 +393,7 @@ public class ApnEditor extends PreferenceActivity
                 return null;
             }
         }
-    }
+    }*/
 
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         String key = preference.getKey();
@@ -428,14 +428,14 @@ public class ApnEditor extends PreferenceActivity
             }
             mBearer.setValue((String) newValue);
             mBearer.setSummary(bearer);
-        } else if (KEY_MVNO_TYPE.equals(key)) {
+        } /*else if (KEY_MVNO_TYPE.equals(key)) {
             String mvno = mvnoDescription((String) newValue);
             if (mvno == null) {
                 return false;
             }
             mMvnoType.setValue((String) newValue);
             mMvnoType.setSummary(mvno);
-        }
+        }*/
 
         return true;
     }
@@ -568,8 +568,8 @@ public class ApnEditor extends PreferenceActivity
             values.put(Telephony.Carriers.BEARER, Integer.parseInt(bearerVal));
         }
 
-        values.put(Telephony.Carriers.MVNO_TYPE, checkNotSet(mMvnoType.getValue()));
-        values.put(Telephony.Carriers.MVNO_MATCH_DATA, checkNotSet(mMvnoMatchData.getText()));
+        /*values.put(Telephony.Carriers.MVNO_TYPE, checkNotSet(mMvnoType.getValue()));
+        values.put(Telephony.Carriers.MVNO_MATCH_DATA, checkNotSet(mMvnoMatchData.getText()));*/
 
         getContentResolver().update(mUri, values, null, null);
 
