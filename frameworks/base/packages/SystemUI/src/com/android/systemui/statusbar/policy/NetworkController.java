@@ -407,7 +407,7 @@ public class NetworkController extends BroadcastReceiver implements DemoMode {
         @Override
         public void onServiceStateChanged(ServiceState state) {
             if (DEBUG) {
-                Slog.d(TAG, "onServiceStateChanged state=" + state.getState());
+                Log.d(TAG, "onServiceStateChanged state=" + state.getState());
             }
             mServiceState = state;
             updateTelephonySignalStrength();
