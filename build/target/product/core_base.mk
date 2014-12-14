@@ -21,7 +21,6 @@ PRODUCT_PROPERTY_OVERRIDES := \
     ro.config.alarm_alert=Alarm_Classic.ogg
 
 PRODUCT_PACKAGES += \
-    ContactsProvider \
     DefaultContainerService \
     Home \
     TelephonyProvider \
@@ -63,10 +62,7 @@ PRODUCT_PACKAGES += \
     requestsync \
     screenrecord \
     telephony-common 
-#    voip-common
-#    libstagefright_chromium_http \
 
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_minimal.mk)
 # Override the PRODUCT_BOOT_JARS set in core_minimal.mk
 PRODUCT_BOOT_JARS := core:conscrypt:okhttp:core-junit:bouncycastle:ext:framework:framework2:telephony-common:mms-common:android.policy:services:apache-xml
-#PRODUCT_BOOT_JARS := core:conscrypt:okhttp:core-junit:bouncycastle:ext:framework:framework2:telephony-common:voip-common:mms-common:android.policy:services:apache-xml:webviewchromium
