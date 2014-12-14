@@ -38,9 +38,15 @@ LOCAL_C_INCLUDES := $(KERNEL_HEADERS) \
 
 LOCAL_CFLAGS := -Werror=format
 
+ifneq ($(BUILD_TINY_ANDROID),true)
 LOCAL_SHARED_LIBRARIES := libstlport libsysutils liblog libcutils libnetutils \
                           libcrypto libhardware_legacy libmdnssd libdl \
                           liblogwrap
+else
+LOCAL_SHARED_LIBRARIES := libstlport liblog libcutils libnetutils \
+                          libcrypto libhardware_legacy libmdnssd libdl \
+                          liblogwrap
+endif
 
 include $(BUILD_EXECUTABLE)
 

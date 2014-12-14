@@ -1,3 +1,4 @@
+ifneq ($(BUILD_TINY_ANDROID),true)
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -20,3 +21,4 @@ LOCAL_SHARED_LIBRARIES	:= liblog libdl
 
 LOCAL_LDLIBS +=
 include $(BUILD_SHARED_LIBRARY)
+endif #BUILD_TINY_ANDROID
