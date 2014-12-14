@@ -6,4 +6,4 @@ lunch
 
 make -j5
 
-
+BUILD_TINY_ANDROID=true make -j5
