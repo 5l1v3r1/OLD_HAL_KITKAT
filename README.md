@@ -1,10 +1,10 @@
 OLD_HAL_KITKAT
 ==============
 
-AOSP KITKAT(4.4.4) source code with old Telephony
+AOSP KITKAT(4.4.4) source code.
 
 This is experimental project!
 
-The main aim - get working Telephony service on Phones and Tablets with dont have KK Roms.
+The main aim - get working diff service on Phones and Tablets which dont have official KK Roms.
 
-RIL implementation(framework, apps) will port from Jellybean (AOSP 4.2).
+HAL implementation(framework, libs, apps) will port from Jellybean (AOSP 4.2).
