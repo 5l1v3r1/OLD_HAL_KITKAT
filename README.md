@@ -1,7 +1,7 @@
 OLD_HAL_KITKAT
 ==============
 
-AOSP KITKAT(4.4.4) source code.
+AOSP KITKAT(4.4.4) source code with old graphic HAL.
 
 This is experimental project!
 
