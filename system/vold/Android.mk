@@ -27,7 +27,7 @@ common_c_includes := \
 	bionic \
 	external/scrypt/lib/crypto
 
-ifneq ($(BUILD_TINY_ANDROID),true)
+#ifneq ($(BUILD_TINY_ANDROID),true)
 common_shared_libraries := \
 	libsysutils \
 	libstlport \
@@ -38,17 +38,17 @@ common_shared_libraries := \
 	liblogwrap \
 	libext4_utils \
 	libcrypto
-else
-common_shared_libraries := \
-	libstlport \
-	libcutils \
-	liblog \
-	libdiskconfig \
-	libhardware_legacy \
-	liblogwrap \
-	libext4_utils \
-	libcrypto
-endif
+#else
+#common_shared_libraries := \
+#	libstlport \
+#	libcutils \
+#	liblog \
+#	libdiskconfig \
+#	libhardware_legacy \
+#	liblogwrap \
+#	libext4_utils \
+#	libcrypto
+#endif
 
 common_static_libraries := \
 	libfs_mgr \

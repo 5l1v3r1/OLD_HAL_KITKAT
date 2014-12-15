@@ -1,4 +1,4 @@
-ifneq ($(BUILD_TINY_ANDROID),true)
+#ifneq ($(BUILD_TINY_ANDROID),true)
 
 LOCAL_PATH:= $(call my-dir)
 
@@ -24,4 +24,4 @@ LOCAL_SHARED_LIBRARIES := libcutils liblog
 
 include $(BUILD_SHARED_LIBRARY)
 
-endif
+#endif
